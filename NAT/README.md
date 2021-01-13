@@ -5,7 +5,7 @@ Noise aware training (NAT) -
 
 To begin training -
 ```
-RUN - run.sh
+Run ./run.sh
 ```
 please change directory of datasets 
 
@@ -25,7 +25,8 @@ class BaseEncMaskDec(BaseModel):
         self.enc_activation = activations.get(encoder_activation or "linear")()
 ```
 * encoder -
-encoder encodes - mixture and noise using encoder to produce a combined encoded representation
+    * encoder encodes - mixture and noise using encoder to produce a combined encoded representation
+    * Paper estimates noise - however here we directly feed noise get test if NAT works
 
 ```python
 learnt_feature_mix = self.forward_encoder(wav)
