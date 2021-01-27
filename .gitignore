@@ -3,6 +3,7 @@ uploader_info.yml
 egs/**/exp
 # Where we'll save pretrained models git folders.
 pretrained_models
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -30,6 +31,8 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+notebooks/logs
+notebooks/lightning_logs
 
 .idea # Folder
 
