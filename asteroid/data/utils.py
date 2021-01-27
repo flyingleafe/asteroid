@@ -1,10 +1,12 @@
 import torch
+import torch.nn.functional as F
 import os
 import os.path
 import numpy as np
 import soundfile as sf
 from torch.utils import data
 from torch.utils.data._utils.collate import default_collate
+from collections.abc import Iterable
 
 from pathlib import Path
 
@@ -57,6 +59,16 @@ def add_noise_with_snr(clean, noise, snr):
     return mixed
 
 
+def cut_or_pad(tensor, length):
+    if tensor.shape[0] >= length:
+        return tensor[:length]
+    else:
+        if isinstance(tensor, torch.Tensor):
+            return F.pad(tensor, (0, length - tensor.shape[0]))
+        else:
+            return np.pad(tensor, ((0, length - tensor.shape[0]),))
+
+
 def find_audio_files(path, exts=[".wav"]):
     audio_files = []
     for root, folders, files in os.walk(path, followlinks=True):
@@ -86,3 +98,24 @@ class WavSet(data.Dataset):
         if self.with_path:
             return audio, path
         return audio
+    
+
+class TrimmedSet(data.Dataset):
+    """
+    Utility wrapper which trims/pads clips in the dataset to a given length    
+    """
+    def __init__(self, ds, length):
+        self.ds = ds
+        self.length = length
+        
+    def __len__(self):
+        return len(self.ds)
+    
+    def __getitem__(self, idx):
+        batches = self.ds[idx]
+        if isinstance(batches, Iterable):
+            return tuple(cut_or_pad(b, self.length) for b in batches)
+        else:
+            return cut_or_pad(batches, self.length)
+        
+        
