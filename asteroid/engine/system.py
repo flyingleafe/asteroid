@@ -1,10 +1,25 @@
 import torch
+import torch.nn.functional as F
 import pytorch_lightning as pl
 from argparse import Namespace
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from asteroid.masknn import UNetGANGenerator, UNetGANDiscriminator
+from collections import OrderedDict
 
 from ..utils import flatten_dict
+from ..utils.torch_utils import script_if_tracing
 
+
+@script_if_tracing
+def _unsqueeze_to_3d(x):
+    """Normalize shape of `x` to [batch, n_chan, time]."""
+    if x.ndim == 1:
+        return x.reshape(1, 1, -1)
+    elif x.ndim == 2:
+        return x.unsqueeze(1)
+    else:
+        return x
+    
 
 class System(pl.LightningModule):
     """Base class for deep learning systems.
@@ -208,3 +223,97 @@ class System(pl.LightningModule):
             elif isinstance(v, (list, tuple)):
                 dic[k] = torch.Tensor(v)
         return dic
+
+    
+class UNetGAN(pl.LightningModule):
+
+    def __init__(
+        self,
+        mse_weight: float = 20,
+        lr_g: float = 1e-3,
+        lr_d: float = 1e-3,
+        **kwargs
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # networks
+        self.generator = UNetGANGenerator()
+        self.discriminator = UNetGANDiscriminator()
+
+    def forward(self, z):
+        return self.generator(_unsqueeze_to_3d(z))
+
+    def adversarial_loss(self, y_hat, y):
+        return F.binary_cross_entropy(y_hat, y)
+
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        mix, clean = batch        
+        mix = _unsqueeze_to_3d(mix)
+        clean = _unsqueeze_to_3d(clean)
+        
+        batch_size = mix.shape[0]
+        fake = torch.zeros((batch_size, 1)).type_as(mix)
+        real = torch.zeros((batch_size, 1)).type_as(mix)
+        enh = self.generator(mix)
+
+        # train generator
+        if optimizer_idx == 0:
+            
+            disc_vals = self.discriminator(mix, enh)
+            
+            mse_loss = F.mse_loss(clean, enh)
+            adv_loss = self.adversarial_loss(disc_vals, real)
+            
+            lm = self.hparams.mse_weight
+            g_loss = adv_loss + lm * mse_loss
+        
+            tqdm_dict = {'g_loss': g_loss, 'mse_loss': mse_loss}
+            output = OrderedDict({
+                'loss': g_loss,
+                'progress_bar': tqdm_dict,
+                'log': tqdm_dict
+            })
+            return output
+
+        # train discriminator
+        if optimizer_idx == 1:
+            # Measure discriminator's ability to classify real from generated samples
+            clean_disc_vals = self.discriminator(mix, clean)
+            enh_disc_vals = self.discriminator(mix, enh.detach())
+
+            real_loss = self.adversarial_loss(clean_disc_vals, real)
+            fake_loss = self.adversarial_loss(enh_disc_vals, fake)
+        
+            d_loss = real_loss + fake_loss
+            tqdm_dict = {'d_loss': d_loss}
+            output = OrderedDict({
+                'loss': d_loss,
+                'progress_bar': tqdm_dict,
+                'log': tqdm_dict
+            })
+            return output
+        
+    def validation_step(self, batch, batch_nb):
+        mix, clean = batch
+        mix = _unsqueeze_to_3d(mix)
+        clean = _unsqueeze_to_3d(clean)
+        enh = self.generator(mix)
+        mse_loss = F.mse_loss(clean, enh)
+        self.log("val_loss", mse_loss, on_epoch=True, prog_bar=True)
+
+    def configure_optimizers(self):
+        lr_g = self.hparams.lr_g
+        lr_d = self.hparams.lr_d
+
+        opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr_g)
+        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr_d)
+        return [opt_g, opt_d], []
+
+#     def on_epoch_end(self):
+#         z = self.validation_z.type_as(self.generator.model[0].weight)
+
+#         # log sampled images
+#         sample_imgs = self(z)
+#         grid = torchvision.utils.make_grid(sample_imgs)
+#         self.logger.experiment.add_image('generated_images', grid, self.current_epoch)
