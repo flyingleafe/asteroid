@@ -40,7 +40,8 @@ class TimitDataset(data.Dataset):
         # Assuming that the noise set is small and easily fits in the memory as a whole
         noise_set = WavSet(noise_dir, with_path=True)
         self.noises = [noise_set[i] for i in range(len(noise_set))]
-        
+         
+        #import pdb; pdb.set_trace()
         if self.cache_dir is not None:
             os.makedirs(self.cache_dir, exist_ok=True)
         
