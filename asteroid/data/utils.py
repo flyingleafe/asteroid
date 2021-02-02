@@ -4,11 +4,12 @@ import os
 import os.path
 import numpy as np
 import soundfile as sf
+import librosa as lr
 from torch.utils import data
 from torch.utils.data._utils.collate import default_collate
 from collections.abc import Iterable
 
-from pathlib import Path
+from pathlib import Path, PurePath
 
 def online_mixing_collate(batch):
     """Mix target sources to create new mixtures.
@@ -80,24 +81,37 @@ def find_audio_files(path, exts=[".wav"]):
     return audio_files
 
 
-class WavSet(data.Dataset):
+class CachedWavSet(data.Dataset):
     """
-    Generic dataset class (fetches wav files from a designated folder)
+    Class for a small dataset which fits into the memory.
+    All the files in the dataset should be in one directory.
+    
+    Args:
+        data_dir (Union[str, os.PathLike]): directory containing the wav files
+        sample_rate (int, optional): sample rate to use. Default: 16000
+        with_path (bool, optional): return path to files together with files themselves
     """
-    def __init__(self, data_dir, with_path=False):
+    def __init__(self, data_dir, sample_rate=16000, with_path=False):
         self.with_path = with_path
+        self.sample_rate = sample_rate
+        
         all_files = os.listdir(data_dir)
         self.wav_paths = [os.path.join(data_dir, p) for p in all_files if p.endswith(".wav")]
+        self.cache = [None]*len(self.wav_paths)
         
     def __len__(self):
         return len(self.wav_paths)
     
     def __getitem__(self, idx):
+        cached = self.cache[idx]
         path = self.wav_paths[idx]
-        audio =  sf.read(path, dtype='float32')[0]
+        if cached is None:
+            cached, _ = lr.load(path, sr=self.sample_rate, mono=True, dtype='float32')
+            self.cache[idx] = cached
+
         if self.with_path:
-            return audio, path
-        return audio
+            return cached, PurePath(path)
+        return cached
     
 
 class TrimmedSet(data.Dataset):
@@ -118,4 +132,29 @@ class TrimmedSet(data.Dataset):
         else:
             return cut_or_pad(batches, self.length)
         
+
+class SlicedSet(data.Dataset):
+    """
+    Utility wrapper which allows seamless slicing of any dataset
+    """
+    
+    def __init__(self, ds, slc):
+        if type(slc) != slice:
+            raise ValueError('Index argument should be a slice')
+        
+        start = slc.start if slc.start is not None else 0
+        stop = slc.stop if slc.stop is not None else len(ds)
+        step = slc.step if slc.step is not None else 1
+        
+        self.idxs = list(range(start, stop, step))
+        self.ds = ds
+        
+    def __len__(self):
+        return len(self.idxs)
+    
+    def __getitem__(self, idx):
+        if type(idx) == slice:
+            return SlicedSet(self, idx)
+        
+        return self.ds[self.idxs[idx]]
         
