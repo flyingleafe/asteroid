@@ -1,12 +1,13 @@
 import os
 import torch
 import os.path
-from torch.utils import data
+from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
 import pandas as pd
 import numpy as np
 import librosa as lr
 import soundfile as sf
 
+from torch import hub
 from tqdm import tqdm
 from pathlib import PurePath
 
@@ -18,12 +19,13 @@ def _load_audio(path, sr=16000):
     return audio
 
 
-class TimitCleanDataset(data.Dataset):
+class TimitDataset(Dataset):
     """
     TIMIT dataset
     """
     
     dataset_name = "TIMIT"
+    download_url = "https://data.deepai.org/timit.zip"
     
     def __init__(self, timit_dir, subset='train', sample_rate=16000, with_path=True):
         if subset not in ('test', 'train'):
@@ -47,16 +49,54 @@ class TimitCleanDataset(data.Dataset):
         if self.with_path:
             return audio, path
         return audio
+    
+    @staticmethod
+    def download(cls, out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+        exists_cond = all([
+            os.path.isdir(os.path.join(out_dir, 'data')),
+            os.path.isfile(os.path.join(out_dir, 'train_data.csv')),
+            os.path.isfile(os.path.join(out_dir, 'test_data.csv'))
+        ])
+        if exists_cond:
+            print('Dataset seems to be already downloaded and extracted')
+            return
+        
+        zip_path = os.path.join(out_dir, 'timit.zip')
+        hub.download_url_to_file(self.download_url, zip_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(out_dir)
+                
+    def get_infos(self):
+        """Get dataset infos (for publishing models).
+
+        Returns:
+            dict, dataset infos with keys `dataset`, `task` and `licences`.
+        """
+        infos = dict()
+        infos["dataset"] = self.dataset_name
+        infos["task"] = "enhancement"
+        infos["licenses"] = [timit_license]
+        return infos
+        
+
+timit_license = dict(
+    title="The DARPA TIMIT Acoustic-Phonetic Continuous Speech Corpus",
+    title_link="https://data.deepai.org/timit.zip",
+    author="DARPA, Texas Instruments, MIT",
+    author_link="https://www.darpa.mil/",
+    non_commercial=False,
+)
 
 
-class TimitDataset(data.Dataset):
+class TimitLegacyDataset(Dataset):
     """
     TIMIT dataset
     """
 
     dataset_name = "TIMIT"
 
-    def __init__(self, timit, noise_dir, subset='train', snr=0, random_seed=42,
+    def __init__(self, timit, noises, subset='train', snr=0, random_seed=42,
                  ignore_saved=False, mixtures_per_clean=2, cache_dir=None,
                  crop_length=None, dset_name=None, with_path=False, sample_rate=16000):
         
@@ -69,20 +109,23 @@ class TimitDataset(data.Dataset):
         self.with_path = with_path
         self.crop_length = crop_length
         
-        if isinstance(timit, data.Dataset):
+        if isinstance(timit, Dataset):
             self.clean_set = timit
             
             # hacking around
-            if isinstance(timit, data.Subset):
+            if isinstance(timit, Subset):
                 self.data_dir = timit.dataset.data_dir
             elif isinstance(timit, TimitCleanDataset):
                 self.data_dir = timit.data_dir
         else:
             self.data_dir = timit
-            self.clean_set = TimitCleanDataset(timit, subset, sample_rate=self.sample_rate)
+            self.clean_set = TimitDataset(timit, subset, sample_rate=self.sample_rate)
             
         # Assuming that the noise set is small and easily fits in the memory as a whole
-        self.noises = CachedWavSet(noise_dir, sample_rate=self.sample_rate, with_path=True)
+        if isinstance(noises, Dataset):
+            self.noises = noises
+        else:
+            self.noises = CachedWavSet(noises, sample_rate=self.sample_rate, with_path=True)
         
         if self.cache_dir is not None:
             os.makedirs(self.cache_dir, exist_ok=True)
@@ -183,10 +226,10 @@ class TimitDataset(data.Dataset):
                               random_seed=seed, cache_dir=cache_dir, **kwargs)
             sets.append(ds)
 
-        total_ds = data.ConcatDataset(sets)
+        total_ds = ConcatDataset(sets)
         
         if prefetch_mixtures:
-            preloader = data.DataLoader(total_ds, num_workers=10)
+            preloader = DataLoader(total_ds, num_workers=10)
 
             total_len = 0
             lens = []
@@ -215,7 +258,6 @@ class TimitDataset(data.Dataset):
 
     def get_infos(self):
         """Get dataset infos (for publishing models).
-
         Returns:
             dict, dataset infos with keys `dataset`, `task` and `licences`.
         """
@@ -224,54 +266,3 @@ class TimitDataset(data.Dataset):
         infos["task"] = "enhancement"
         #infos["licenses"] = [timit_license]
         return infos
-    
-
-class RandomMixtureDataset(data.Dataset):
-    """
-    Continuously applies random mixtures to TIMIT dataset
-    """
-    def __init__(self, timit, noise_dir, subset='train', snr_range=(-25, -5),
-                 random_seed=42, crop_length=16384, sample_rate=16000):
-        
-        self.sample_rate = sample_rate
-        self.init_random_seed = random_seed
-        
-        self.low_snr, self.high_snr = snr_range
-        self.crop_length = crop_length
-        
-        if isinstance(timit, data.Dataset):
-            self.clean_set = timit
-        else:   
-            self.clean_set = TimitCleanDataset(timit, subset, sample_rate=self.sample_rate)
-            
-        self.noises = CachedWavSet(noise_dir, sample_rate=self.sample_rate)
-        
-        self.reset_random_state()
-        
-    def reset_random_state(self):
-        self.random_state = np.random.RandomState(self.init_random_seed)
-        
-    def _random_crop(self, wav):
-        if len(wav) < self.crop_length:
-            return np.pad(wav, ((0, self.crop_length - len(wav)),))
-        
-        offset = self.random_state.randint(0, len(wav) - self.crop_length)
-        return wav[offset:offset+self.crop_length]
-        
-    def __len__(self):
-        return len(self.clean_set)
-    
-    def __getitem__(self, idx):
-        clean, _ = self.clean_set[idx]
-        noise_idx = self.random_state.randint(0, len(self.noises))
-        noise = self.noises[noise_idx]
-        
-        clean_crop = self._random_crop(clean)
-        noise_crop = self._random_crop(noise)
-        snr = self.random_state.uniform(self.low_snr, self.high_snr)
-        mix = add_noise_with_snr(clean_crop, noise_crop, snr)
-        
-        return torch.from_numpy(mix), torch.from_numpy(clean_crop)
-        
-    
-timit_license = None

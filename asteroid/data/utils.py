@@ -5,10 +5,12 @@ import os.path
 import numpy as np
 import soundfile as sf
 import librosa as lr
-from torch.utils import data
+from torch.utils.data import Dataset
 from torch.utils.data._utils.collate import default_collate
 from collections.abc import Iterable
+from tqdm import tqdm
 
+from typing import Optional, Union, List
 from pathlib import Path, PurePath
 
 def online_mixing_collate(batch):
@@ -70,6 +72,17 @@ def cut_or_pad(tensor, length):
             return np.pad(tensor, ((0, length - tensor.shape[0]),))
 
 
+def crop_or_wrap(wav, crop_len, offset):
+    if len(wav) < crop_len:
+        n_repeat = int(np.ceil(float(crop_len) / float(len(wav))))
+        wav_ex = np.tile(wav, n_repeat)
+        wav = wav_ex[0 : crop_len]
+    else:
+        offset = offset % (len(wav) - crop_len + 1)
+        wav = wav[offset : offset+crop_len]
+    return wav
+        
+
 def find_audio_files(path, exts=[".wav"]):
     audio_files = []
     for root, folders, files in os.walk(path, followlinks=True):
@@ -81,7 +94,20 @@ def find_audio_files(path, exts=[".wav"]):
     return audio_files
 
 
-class CachedWavSet(data.Dataset):
+def _batch_head(batch):
+    if isinstance(batch, (list, tuple)):
+        return batch[0], batch[1:]
+    return batch, None
+
+def _batch_cons(head, tail):
+    if tail is not None:
+        if not isinstance(head, (list, tuple)):
+            head = [head]
+        return tuple(list(head) + list(tail))
+    return head
+
+
+class CachedWavSet(Dataset):
     """
     Class for a small dataset which fits into the memory.
     All the files in the dataset should be in one directory.
@@ -91,13 +117,17 @@ class CachedWavSet(data.Dataset):
         sample_rate (int, optional): sample rate to use. Default: 16000
         with_path (bool, optional): return path to files together with files themselves
     """
-    def __init__(self, data_dir, sample_rate=16000, with_path=False):
+    def __init__(self, data_dir, sample_rate=16000, with_path=False, precache=False):
         self.with_path = with_path
         self.sample_rate = sample_rate
         
         all_files = os.listdir(data_dir)
         self.wav_paths = [os.path.join(data_dir, p) for p in all_files if p.endswith(".wav")]
         self.cache = [None]*len(self.wav_paths)
+        
+        if precache:
+            for i in tqdm(range(len(self)), 'Precaching audio'):
+                _ = self[i]
         
     def __len__(self):
         return len(self.wav_paths)
@@ -112,9 +142,126 @@ class CachedWavSet(data.Dataset):
         if self.with_path:
             return cached, PurePath(path)
         return cached
+
+
+class FixedMixtureSet(Dataset):
+    
+    MAX_CLIP_LEN = 100000000  # arbitrary large length; should be larger than any reasonable
+                              # clip length for any reasonable sample rate
+    
+    """
+    Wrapper dataset which combines a given set of clean audio clips and set of noise clips
+    in a random, but fixed manner (determined by a random seed), with a fixed SNR.
+    
+    Args:
+        clean (Dataset): dataset with clean data
+        noises (Dataset): dataset with noises data, should be with the same sample rate as clean
+        snrs (float, list of float): SNRs with which to combine noises
+        
+    """
+    def __init__(self, clean: Dataset, noises: Dataset, snrs: Union[float, List[float]],
+                 random_seed: int = 42, mixtures_per_clean: Optional[int] = None,
+                 crop_length: Optional[int] = None):
+        if mixtures_per_clean is None:
+            mixtures_per_clean = len(noises)
+            
+        self.clean = clean
+        self.noises = noises
+        self.snrs = snrs if isinstance(snrs, list) else [snrs]
+        self.random_state = np.random.RandomState(random_seed)
+        self.crop_length = crop_length
+        
+        one_snr_len = len(clean)*mixtures_per_clean
+        self.mapping = np.zeros((one_snr_len*len(self.snrs), 5), dtype=int)
+        
+        # clean and noise indices
+        offset = 0
+        for snr in self.snrs:
+            clean_ix = 0
+            for ix in range(offset, offset+one_snr_len, mixtures_per_clean):
+                self.mapping[ix:ix+mixtures_per_clean, 0] = clean_ix
+                self.mapping[ix:ix+mixtures_per_clean, 1] = self.random_state.choice(
+                    np.arange(len(self.noises)), size=mixtures_per_clean, replace=False)
+                clean_ix += 1
+            
+            self.mapping[offset:offset+one_snr_len, 2] = snr
+            offset += one_snr_len
+            
+        # noise offsets
+        self.mapping[:, 3] = self.random_state.randint(0, self.MAX_CLIP_LEN, len(self))
+        self.mapping[:, 4] = self.random_state.randint(0, self.MAX_CLIP_LEN, len(self))
+    
+    def __len__(self):
+        return self.mapping.shape[0]
+
+    def __getitem__(self, idx):        
+        clean_ix, noise_ix, snr, clean_offset, noise_offset = self.mapping[idx]
+        clean, tail = _batch_head(self.clean[clean_ix])
+        noise = self.noises[noise_ix]
+        
+        if self.crop_length is not None:
+            clean = crop_or_wrap(clean, self.crop_length, clean_offset)
+        
+        noise = crop_or_wrap(noise, len(clean), noise_offset)
+        mix = add_noise_with_snr(clean, noise, snr)
+        return _batch_cons([torch.from_numpy(mix), torch.from_numpy(clean)], tail)
+    
+    
+class RandomMixtureSet(Dataset):
+    """
+    Continuously applies random mixtures to TIMIT dataset
+    """
+    def __init__(self, clean: Dataset, noises: Dataset, snr_range=(-25, -5), repeat_factor=1,
+                 random_seed=42, crop_length=None, with_snr=False):
+        
+        self.init_random_seed = random_seed
+        
+        self.low_snr, self.high_snr = snr_range
+        self.crop_length = crop_length
+        self.repeat_factor = repeat_factor
+        self.with_snr = with_snr
+        
+        self.clean_set = clean
+        self.noises = noises
+        
+        self.reset_random_state()
+        
+    def reset_random_state(self):
+        self.random_state = np.random.RandomState(self.init_random_seed)
+        
+    def _random_crop(self, wav, crop_length):
+        if len(wav) > crop_length:
+            offset = self.random_state.randint(0, len(wav) - crop_length)
+        else:
+            offset = 0
+        
+        return crop_or_wrap(wav, crop_length, offset)
+        
+    def __len__(self):
+        return len(self.clean_set)*self.repeat_factor
+    
+    def __getitem__(self, idx):
+        idx = idx % len(self.clean_set)
+        
+        clean, tail = _batch_head(self.clean_set[idx])
+        noise_idx = self.random_state.randint(0, len(self.noises))
+        noise = self.noises[noise_idx]
+        
+        if self.crop_length is not None:
+            clean = self._random_crop(clean, self.crop_length)
+            
+        noise = self._random_crop(noise, len(clean))
+        
+        snr = self.random_state.uniform(self.low_snr, self.high_snr)
+        mix = add_noise_with_snr(clean, noise, snr)
+        
+        mix = torch.from_numpy(mix)
+        clean = torch.from_numpy(clean)
+        
+        return _batch_cons([mix, clean], tail)
     
 
-class TrimmedSet(data.Dataset):
+class TrimmedSet(Dataset):
     """
     Utility wrapper which trims/pads clips in the dataset to a given length    
     """
@@ -133,7 +280,7 @@ class TrimmedSet(data.Dataset):
             return cut_or_pad(batches, self.length)
         
 
-class SlicedSet(data.Dataset):
+class SlicedSet(Dataset):
     """
     Utility wrapper which allows seamless slicing of any dataset
     """

@@ -9,7 +9,8 @@ from .sms_wsj_dataset import SmsWsjDataset
 from .kinect_wsj import KinectWsjMixDataset
 from .fuss_dataset import FUSSDataset
 from .dampvsep_dataset import DAMPVSEPSinglesDataset
-from .timit_dataset import TimitDataset, TimitCleanDataset, RandomMixtureDataset
+from .timit_dataset import TimitDataset, TimitLegacyDataset
+from .utils import FixedMixtureSet, RandomMixtureSet
 
 __all__ = [
     "AVSpeechDataset",
@@ -24,6 +25,7 @@ __all__ = [
     "FUSSDataset",
     "DAMPVSEPSinglesDataset",
     "TimitDataset",
+    "TimitLegacyDataset",
     "TimitCleanDataset",
     "RandomMixtureDataset"
 ]
