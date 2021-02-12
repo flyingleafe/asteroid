@@ -1,6 +1,6 @@
 import pathlib
 
-from .models import ConvTasNet, DCCRNet, DCUNet, DPRNNTasNet, DPTNet, LSTMTasNet, DeMask
+from .models import ConvTasNet, DCCRNet, DCUNet, DPRNNTasNet, DPTNet, LSTMTasNet, DeMask, WaveUnet
 from .utils import deprecation_utils, torch_utils  # noqa
 
 project_root = str(pathlib.Path(__file__).expanduser().absolute().parent.parent)
@@ -27,5 +27,6 @@ __all__ = [
     "DeMask",
     "DCUNet",
     "DCCRNet",
+    "WaveUnet",
     "show_available_models",
 ]
