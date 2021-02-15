@@ -157,11 +157,15 @@ class FixedMixtureSet(Dataset):
         clean (Dataset): dataset with clean data
         noises (Dataset): dataset with noises data, should be with the same sample rate as clean
         snrs (float, list of float): SNRs with which to combine noises
-        
+        random_seed (int): random seed which determines the mixtures
+        mixtures_per_clean (int or None): with how many noises from the noise dataset to mix each utterance.
+            If `None`, mix with every noise.
+        with_snr (bool): Whether or not to return SNR of mixture together with the mixture and clean sample
+        crop_length (int or None): if not `None`, randomly crop/wrap each clean sample to the fixed length.
     """
     def __init__(self, clean: Dataset, noises: Dataset, snrs: Union[float, List[float]],
                  random_seed: int = 42, mixtures_per_clean: Optional[int] = None,
-                 crop_length: Optional[int] = None):
+                 with_snr: bool = False, crop_length: Optional[int] = None):
         if mixtures_per_clean is None:
             mixtures_per_clean = len(noises)
             
@@ -169,6 +173,7 @@ class FixedMixtureSet(Dataset):
         self.noises = noises
         self.snrs = snrs if isinstance(snrs, list) else [snrs]
         self.random_state = np.random.RandomState(random_seed)
+        self.with_snr = with_snr
         self.crop_length = crop_length
         
         one_snr_len = len(clean)*mixtures_per_clean
@@ -204,7 +209,14 @@ class FixedMixtureSet(Dataset):
         
         noise = crop_or_wrap(noise, len(clean), noise_offset)
         mix = add_noise_with_snr(clean, noise, snr)
-        return _batch_cons([torch.from_numpy(mix), torch.from_numpy(clean)], tail)
+        
+        mix = torch.from_numpy(mix)
+        clean = torch.from_numpy(clean)
+        
+        if self.with_snr:
+            tail = [snr] if tail is None else [snr] ++ tail
+        
+        return _batch_cons([mix, clean], tail)
     
     
 class RandomMixtureSet(Dataset):

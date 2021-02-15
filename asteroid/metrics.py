@@ -18,6 +18,7 @@ def get_metrics(
     estimate,
     sample_rate=16000,
     metrics_list="all",
+    including='both',
     average=True,
     compute_permutation=False,
     ignore_metrics_errors=False,
@@ -32,6 +33,7 @@ def get_metrics(
         sample_rate (int): sampling rate of the audio clips.
         metrics_list (Union[List[str], str): List of metrics to compute.
             Defaults to 'all' (['si_sdr', 'sdr', 'sir', 'sar', 'stoi', 'pesq']).
+        including (str): Include input metrics ('input'), output metrics ('output') or both ('both')
         average (bool): Return dict([float]) if True, else dict([array]).
         compute_permutation (bool): Whether to compute the permutation on
             estimate sources for the output metrics (default False)
@@ -78,19 +80,28 @@ def get_metrics(
         metrics_list = ALL_METRICS
     if isinstance(metrics_list, str):
         metrics_list = [metrics_list]
-    # For each utterance, we get a dictionary with the input and output metrics
-    input_metrics = InputMetrics(
-        observation=mix, speech_source=clean, enable_si_sdr=True, sample_rate=sample_rate
-    )
-    output_metrics = OutputMetrics(
-        speech_prediction=estimate,
-        speech_source=clean,
-        enable_si_sdr=True,
-        sample_rate=sample_rate,
-        compute_permutation=compute_permutation,
-    )
+        
+    # For each utterance, we get a dictionary with the input and output metrics    
+    assert including in ('input', 'output', 'both')
+    
+    metrics = []
+    if including in ('both', 'input'):
+        input_metrics = InputMetrics(
+            observation=mix, speech_source=clean, enable_si_sdr=True, sample_rate=sample_rate
+        )
+        metrics.append((input_metrics, "input_"))
+    if including in ('both', 'output'):
+        output_metrics = OutputMetrics(
+            speech_prediction=estimate,
+            speech_source=clean,
+            enable_si_sdr=True,
+            sample_rate=sample_rate,
+            compute_permutation=compute_permutation,
+        )
+        metrics.append((output_metrics, ""))
+        
     utt_metrics = {}
-    for src, prefix in [(input_metrics, "input_"), (output_metrics, "")]:
+    for src, prefix in metrics:
         for metric in metrics_list:
             # key: eg. "input_pesq" or "pesq"
             key = prefix + metric
