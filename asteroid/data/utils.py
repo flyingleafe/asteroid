@@ -238,6 +238,8 @@ class RandomMixtureSet(Dataset):
         return crop_or_wrap(wav, crop_length, offset)
         
     def __len__(self):
+        #16 for testing 
+        #return 16 
         return len(self.clean_set)*self.repeat_factor
     
     def __getitem__(self, idx):

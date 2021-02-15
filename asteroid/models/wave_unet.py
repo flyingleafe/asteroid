@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from asteroid.models.base_models import BaseModel
+from asteroid.utils.hub_utils import cached_download, SR_HASHTABLE
 
 
 class DownSamplingLayer(nn.Module):
@@ -29,11 +31,12 @@ class UpSamplingLayer(nn.Module):
     def forward(self, ipt):
         return self.main(ipt)
 
-class WaveUnet(nn.Module):
-    def __init__(self, n_layers=12, channels_interval=24, n_src=1):
+class WaveUnet(BaseModel):
+    def __init__(self, n_layers=12, channels_interval=24, n_src=1, sample_rate=8000.0):
         super(WaveUnet, self).__init__()
 
         self.n_src = n_src
+        self.sample_rate=sample_rate
         self.n_layers = n_layers
         print('Number of layers: ', self.n_layers)
         self.channels_interval = channels_interval
@@ -108,7 +111,10 @@ class WaveUnet(nn.Module):
         o = torch.cat([o, _input], dim=1)
         o = self.out(o)
         return o
-
+    
+    def get_model_args(self):
+        #return empty atm as configs are hardcoded for now
+        return {}
 
     def serialize(self):
         """Serialize model and output dictionary.
@@ -122,7 +128,7 @@ class WaveUnet(nn.Module):
         model_conf = dict(
             model_name=self.__class__.__name__,
             state_dict=self.get_state_dict(),
-            model_args=self.get_model_args(),
+            model_args=self.get_model_args(), #empty as of now (hardcoded)
         )
         # Additional infos
         infos = dict()

@@ -19,17 +19,15 @@ from asteroid_filterbanks.transforms import mag
 from asteroid.engine import System
 from asteroid.losses import singlesrc_neg_sisdr
 
-from asteroid import WaveUnet
+from asteroid import DPTNet
 
-BATCH_SIZE       = 16     # could be more on cluster, test if larger one work
+BATCH_SIZE       = 8     # could be more on cluster, test if larger one work
 SAMPLE_RATE      = 8000   # as agreed upon
-CROP_LEN         = 16384  # Specific length for waveunet 
+CROP_LEN         = 24000  # average track len in TIMIT
 SEED             = 42     # magic number :)
 
-from asteroid.losses import singlesrc_mse
-def mse_loss_wrapper(est_target, target):
-    return singlesrc_mse(est_target.squeeze(1), target).mean()
-
+def sisdr_loss_wrapper(est_target, target):
+    return singlesrc_neg_sisdr(est_target.squeeze(1), target).mean()
 
 def train_val_split(ds, val_fraction=0.1, random_seed=SEED):
     assert val_fraction > 0 and val_fraction < 0.5
@@ -58,7 +56,7 @@ timit_train, timit_val = train_val_split(timit, val_fraction=0.1, random_seed=SE
 # Training data mixes crops randomly on the fly with random SNR in range (effectively infinite training data)
 # `repeat_factor=20` means that the dataset contains 20 copies of itself - it is the easiest way to make the epoch longer
 timit_train = RandomMixtureSet(timit_train, noises, random_seed=SEED, snr_range=(-25, -5),
-                               crop_length=CROP_LEN, repeat_factor=30)
+                               crop_length=CROP_LEN, repeat_factor=10)
 
 # Validation data is fixed (for stability): mix every clean clip with all the noises in the folder
 # Argument `mixtures_per_clean` regulates with how many different noise files each clean file will be mixed
@@ -73,14 +71,14 @@ val_loader = DataLoader(timit_val, batch_size=BATCH_SIZE,
 
 # some random parameters, does it look sensible?
 LR = 1e-3
-REDUCE_LR_PATIENCE = 5
-EARLY_STOP_PATIENCE = 20
+REDUCE_LR_PATIENCE = 3
+EARLY_STOP_PATIENCE = 10
 MAX_EPOCHS = 300
 
 # the model here should be constructed in the script accordingly to the passed config (including the model type)
 # most of the models accept `sample_rate` parameter for encoders, which is important (default is 16000, override)
 #model = DCUNet("DCUNet-20", fix_length_mode="trim", sample_rate=SAMPLE_RATE)
-model =WaveUnet(n_src=1)
+model = DPTNet(n_src=1)
 
 from pytorch_lightning.callbacks import ModelCheckpoint
 checkpoint = ModelCheckpoint(
@@ -94,17 +92,16 @@ optimizer = optim.Adam(model.parameters(), lr=LR)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=REDUCE_LR_PATIENCE)
 early_stopping = EarlyStopping(monitor='val_loss', patience=EARLY_STOP_PATIENCE)
 
-
 # Probably we also need to subclass `System`, in order to log the target metrics on the validation set (PESQ/STOI)
-system = System(model, optimizer,mse_loss_wrapper, train_loader, val_loader, scheduler)
+system = System(model, optimizer, sisdr_loss_wrapper, train_loader, train_loader, scheduler)
 
 # log dir and model name are also part of the config, of course
 LOG_DIR = 'logs'
-logger = pl_loggers.TensorBoardLogger(LOG_DIR, name='TIMIT-drones-WaveUnet-random', version=1)
+logger = pl_loggers.TensorBoardLogger(LOG_DIR, name='TIMIT-drones-DPTNet-random', version=1)
 
 # choose the proper accelerator for JADE, probably `ddp` (also, `auto_select_gpus=True` might be useful)
 trainer = Trainer(max_epochs=MAX_EPOCHS, gpus=-1,
                   logger=logger, callbacks=[early_stopping, checkpoint], deterministic=True, gradient_clip_val=5.0,)
 
 trainer.fit(system)
-torch.save(model.serialize(), 'waveunet_model.pt')
+torch.save(model.serialize(), 'dptnet_model.pt')
