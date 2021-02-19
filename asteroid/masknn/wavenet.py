@@ -30,11 +30,13 @@ class UpSamplingLayer(nn.Module):
     def forward(self, ipt):
         return self.main(ipt)
 
-
-class UNetGANGenerator(nn.Module):
-    def __init__(self, n_layers=8, channels_interval=24, middle_dilations=[1, 2, 4]):
+    
+class Waveunet(nn.Module):
+    def __init__(self, n_layers=12, channels_interval=24, n_src=1,
+                 middle_layer=[(15, 1)]):
         super().__init__()
 
+        self.n_src = n_src
         self.n_layers = n_layers
         self.channels_interval = channels_interval
         encoder_in_channels_list = [1] + [i * self.channels_interval for i in range(1, self.n_layers)]
@@ -54,8 +56,8 @@ class UNetGANGenerator(nn.Module):
         middle_layer_size = self.n_layers * self.channels_interval
         middle_layer = [
             DownSamplingLayer(middle_layer_size, middle_layer_size,
-                              kernel_size=3, dilation=d, padding=d)
-            for d in middle_dilations
+                              kernel_size=k, dilation=d, padding=(k // 2 * d))
+            for (k, d) in middle_layer
         ]
         self.middle = nn.Sequential(*middle_layer)
 
@@ -73,13 +75,19 @@ class UNetGANGenerator(nn.Module):
             )
 
         self.out = nn.Sequential(
-            nn.Conv1d(1 + self.channels_interval, 1, kernel_size=1, stride=1),
+            nn.Conv1d(1 + self.channels_interval, self.n_src, kernel_size=1, stride=1),
             nn.Tanh()
         )
 
-    def forward(self, input):
+    def forward(self, _input):
+        '''
+        _input = torch.randn(1, 1, 16384)
+        16384 - should be the lenght of the mixture
+        16384 - To get the correct dimension of convolution
+        '''
+
         tmp = []
-        o = input
+        o = _input
 
         # Up Sampling
         for i in range(self.n_layers):
@@ -89,26 +97,25 @@ class UNetGANGenerator(nn.Module):
             o = o[:, :, ::2]
 
         o = self.middle(o)
-        
+
         # Down Sampling
         for i in range(self.n_layers):
             # [batch_size, T * 2, channels]
             o = F.interpolate(o, scale_factor=2, mode="linear", align_corners=True)
-            
-            # workaround over stupid sizes mismatch. can do better here?
-            skip = tmp[self.n_layers - i - 1]
-            min_len = min(o.shape[2], skip.shape[2])
-            o = o[:, :, :min_len]
-            skip = skip[:, :, :min_len]
-            
+            #import pdb; pdb.set_trace()
             # Skip Connection
-            o = torch.cat([o, skip], dim=1)
+            o = torch.cat([o, tmp[self.n_layers - i - 1]], dim=1)
             o = self.decoder[i](o)
 
-        o = torch.cat([o, input], dim=1)
+        o = torch.cat([o, _input], dim=1)
         o = self.out(o)
         return o
         
+        
+class UNetGANGenerator(Waveunet):
+    def __init__(self, middle_layer=[(3, 1), (3, 2), (3, 4)], **kwargs):
+        super().__init__(middle_layer=middle_layer, **kwargs)
+
 
 class UNetGANDiscriminator(nn.Module):
     """
@@ -129,5 +136,6 @@ class UNetGANDiscriminator(nn.Module):
         self.main = nn.Sequential(*main_layers)
         
     def forward(self, mixture, clean_or_enh):
+        mixture = mixture.unsqueeze(1)
         inp = torch.cat([mixture, clean_or_enh], dim=-1)
         return self.main(inp).mean(dim=-1)

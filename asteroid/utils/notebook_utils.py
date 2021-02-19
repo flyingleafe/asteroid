@@ -6,13 +6,13 @@ import librosa.display as lrd
 import IPython.display as ipd
 
 
-def show_wav(wav, sr=8000, specgram_lib='librosa'):
+def show_wav(wav, sr=8000, figsize=(10,4), specgram_lib='librosa'):
     if type(wav) == str:
         wav, sr = lr.load(wav)
     elif type(wav) == torch.Tensor:
         wav = wav.detach().numpy()
     
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
     lrd.waveplot(wav, sr=sr, ax=axes[0])
     
     if specgram_lib == 'librosa':

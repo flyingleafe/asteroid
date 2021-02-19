@@ -6,20 +6,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from asteroid.masknn import UNetGANGenerator, UNetGANDiscriminator
 from collections import OrderedDict
 
-from ..utils import flatten_dict
-from ..utils.torch_utils import script_if_tracing
+from ..utils import flatten_dict, unsqueeze_to_3d
 
-
-@script_if_tracing
-def _unsqueeze_to_3d(x):
-    """Normalize shape of `x` to [batch, n_chan, time]."""
-    if x.ndim == 1:
-        return x.reshape(1, 1, -1)
-    elif x.ndim == 2:
-        return x.unsqueeze(1)
-    else:
-        return x
-    
 
 class System(pl.LightningModule):
     """Base class for deep learning systems.
@@ -86,7 +74,7 @@ class System(pl.LightningModule):
     def common_step(self, batch, batch_nb, train=True):
         """Common forward step between training and validation.
 
-        The function of this method is to unpack the data given by the loader,
+        The function of this method is to unpack pool_slenthe data given by the loader,
         forward the batch through the model and compute the loss.
         Pytorch-lightning handles all the rest.
 
@@ -213,8 +201,8 @@ class UNetGAN(pl.LightningModule):
     def __init__(
         self,
         mse_weight: float = 20,
-        lr_g: float = 1e-3,
-        lr_d: float = 1e-3,
+        lr_g: float = 2e-4,
+        lr_d: float = 2e-4,
         **kwargs
     ):
         super().__init__()
@@ -225,24 +213,24 @@ class UNetGAN(pl.LightningModule):
         self.discriminator = UNetGANDiscriminator()
 
     def forward(self, z):
-        return self.generator(_unsqueeze_to_3d(z))
+        return self.generator(z)
 
     def adversarial_loss(self, y_hat, y):
         return F.binary_cross_entropy(y_hat, y)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        mix, clean = batch        
-        mix = _unsqueeze_to_3d(mix)
-        clean = _unsqueeze_to_3d(clean)
+        mix, clean = batch
+        
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
         
         batch_size = mix.shape[0]
         fake = torch.zeros((batch_size, 1)).type_as(mix)
-        real = torch.zeros((batch_size, 1)).type_as(mix)
+        real = torch.ones((batch_size, 1)).type_as(mix)
         enh = self.generator(mix)
-
+        
         # train generator
         if optimizer_idx == 0:
-            
             disc_vals = self.discriminator(mix, enh)
             
             mse_loss = F.mse_loss(clean, enh)
@@ -262,7 +250,7 @@ class UNetGAN(pl.LightningModule):
         # train discriminator
         if optimizer_idx == 1:
             # Measure discriminator's ability to classify real from generated samples
-            clean_disc_vals = self.discriminator(mix, clean)
+            clean_disc_vals = self.discriminator(mix, clean.unsqueeze(1))
             enh_disc_vals = self.discriminator(mix, enh.detach())
 
             real_loss = self.adversarial_loss(clean_disc_vals, real)
@@ -279,8 +267,8 @@ class UNetGAN(pl.LightningModule):
         
     def validation_step(self, batch, batch_nb):
         mix, clean = batch
-        mix = _unsqueeze_to_3d(mix)
-        clean = _unsqueeze_to_3d(clean)
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
         enh = self.generator(mix)
         mse_loss = F.mse_loss(clean, enh)
         self.log("val_loss", mse_loss, on_epoch=True, prog_bar=True)

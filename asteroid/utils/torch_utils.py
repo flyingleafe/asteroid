@@ -212,3 +212,14 @@ def jitable_shape(tensor):
         torch.Tensor: Shape of ``tensor``
     """
     return torch.tensor(tensor.shape)
+
+
+@script_if_tracing
+def unsqueeze_to_3d(x):
+    """Normalize shape of `x` to [batch, n_chan, time]."""
+    if x.ndim == 1:
+        return x.reshape(1, 1, -1)
+    elif x.ndim == 2:
+        return x.unsqueeze(1)
+    else:
+        return x

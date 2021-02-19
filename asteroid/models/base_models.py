@@ -3,20 +3,9 @@ import warnings
 
 from .. import separate
 from ..masknn import activations
-from ..utils.torch_utils import pad_x_to_y, script_if_tracing, jitable_shape
+from ..utils.torch_utils import unsqueeze_to_3d, pad_x_to_y, script_if_tracing, jitable_shape
 from ..utils.hub_utils import cached_download
 from ..utils.deprecation_utils import is_overridden, mark_deprecated, VisibleDeprecationWarning
-
-
-@script_if_tracing
-def _unsqueeze_to_3d(x):
-    """Normalize shape of `x` to [batch, n_chan, time]."""
-    if x.ndim == 1:
-        return x.reshape(1, 1, -1)
-    elif x.ndim == 2:
-        return x.unsqueeze(1)
-    else:
-        return x
 
 
 class BaseModel(torch.nn.Module):
@@ -197,6 +186,48 @@ class BaseModel(torch.nn.Module):
         raise NotImplementedError
 
 
+class BaseWavenetModel(BaseModel):
+    """Base class for models operating entirely in time-domain.
+    
+    Args:
+        wavenet (nn.Module): network which accepts raw audio
+    """
+    def __init__(self, wavenet, sample_rate=8000):
+        super().__init__(sample_rate=sample_rate)
+        self.wavenet = wavenet
+        
+    def forward(self, wav):
+        """Wavenet model forward
+
+        Args:
+            wav (torch.Tensor): waveform tensor. 1D, 2D or 3D tensor, time last.
+
+        Returns:
+            torch.Tensor, of shape (batch, n_src, time) or (n_src, time).
+        """
+        # Remember shape to shape reconstruction, cast to Tensor for torchscript
+        shape = jitable_shape(wav)
+        # Reshape to (batch, n_mix, time)
+        wav = unsqueeze_to_3d(wav)
+        output = self.apply_wavenet(wav)
+        reconstructed = pad_x_to_y(output, wav)
+        return _shape_reconstructed(reconstructed, shape)
+    
+    def apply_wavenet(self, wav):
+        """Apply wavenet to WAV data
+        
+        Redefine this method for some data preprocessing (e.g. chunking)
+        
+        Args:
+            wav (torch.Tensor): waveforms of shape (batch, channel, time)
+        
+        Returns:
+            torch.Tensor, of shape (batch, n_src, time)
+        """
+        
+        return self.wavenet(wav)
+        
+
 class BaseEncoderMaskerDecoder(BaseModel):
     """Base class for encoder-masker-decoder separation models.
 
@@ -228,7 +259,7 @@ class BaseEncoderMaskerDecoder(BaseModel):
         # Remember shape to shape reconstruction, cast to Tensor for torchscript
         shape = jitable_shape(wav)
         # Reshape to (batch, n_mix, time)
-        wav = _unsqueeze_to_3d(wav)
+        wav = unsqueeze_to_3d(wav)
 
         # Real forward
         tf_rep = self.forward_encoder(wav)
