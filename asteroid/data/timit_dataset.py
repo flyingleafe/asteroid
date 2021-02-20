@@ -1,5 +1,6 @@
 import os
 import torch
+import zipfile
 import os.path
 from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
 import pandas as pd
@@ -50,7 +51,7 @@ class TimitDataset(Dataset):
             return audio, path
         return audio
     
-    @staticmethod
+    @classmethod
     def download(cls, out_dir):
         os.makedirs(out_dir, exist_ok=True)
         exists_cond = all([
@@ -63,7 +64,7 @@ class TimitDataset(Dataset):
             return
         
         zip_path = os.path.join(out_dir, 'timit.zip')
-        hub.download_url_to_file(self.download_url, zip_path)
+        hub.download_url_to_file(cls.download_url, zip_path)
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(out_dir)
                 
