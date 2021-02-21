@@ -63,7 +63,7 @@ class RegressionFCNN(BaseEncoderMaskerDecoder):
         self.register_buffer('scaler_std', torch.zeros(self.n_freq))
         self.has_scaler = False
         
-    def compute_scaler(self, data_iter, num_workers=5):
+    def compute_scaler(self, data_iter):
         count = 0
         total_sum = torch.zeros(self.n_freq)
         total_sum_2 = torch.zeros(self.n_freq)

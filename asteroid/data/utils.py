@@ -168,10 +168,10 @@ class FixedMixtureSet(Dataset):
                  with_snr: bool = False, crop_length: Optional[int] = None):
         if mixtures_per_clean is None:
             mixtures_per_clean = len(noises)
-            
+                    
         self.clean = clean
         self.noises = noises
-        self.snrs = snrs if isinstance(snrs, list) else [snrs]
+        self.snrs = snrs if isinstance(snrs, Iterable) else [snrs]
         self.random_state = np.random.RandomState(random_seed)
         self.with_snr = with_snr
         self.crop_length = crop_length

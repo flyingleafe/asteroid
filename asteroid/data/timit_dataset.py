@@ -3,6 +3,7 @@ import torch
 import zipfile
 import os.path
 from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
+from torch.multiprocessing import cpu_count
 import pandas as pd
 import numpy as np
 import librosa as lr
@@ -27,6 +28,7 @@ class TimitDataset(Dataset):
     
     dataset_name = "TIMIT"
     download_url = "https://data.deepai.org/timit.zip"
+    default_sample_rate = 16000
     
     def __init__(self, timit_dir, subset='train', sample_rate=16000, with_path=True):
         if subset not in ('test', 'train'):
@@ -35,6 +37,7 @@ class TimitDataset(Dataset):
         self.data_dir = os.path.join(timit_dir, 'data')
         self.sample_rate = sample_rate
         self.with_path = with_path
+        self.subset = subset
         
         df = pd.read_csv(os.path.join(timit_dir, f'{subset}_data.csv'))
         self.df = df[df['is_converted_audio'] == True]
@@ -52,7 +55,7 @@ class TimitDataset(Dataset):
         return audio
     
     @classmethod
-    def download(cls, out_dir):
+    def download(cls, out_dir, sample_rate=16000):
         os.makedirs(out_dir, exist_ok=True)
         exists_cond = all([
             os.path.isdir(os.path.join(out_dir, 'data')),
@@ -65,8 +68,29 @@ class TimitDataset(Dataset):
         
         zip_path = os.path.join(out_dir, 'timit.zip')
         hub.download_url_to_file(cls.download_url, zip_path)
+        
+        print('Extracting files...')
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(out_dir)
+            
+        os.remove(zip_path)
+        print('Done')
+        
+        if sample_rate != cls.default_sample_rate:
+            print(f'Resampling from original sample rate {cls.default_sample_rate} Hz to {sample_rate} Hz')
+            timit_train = cls(out_dir, subset='train', sample_rate=sample_rate)
+            timit_test = cls(out_dir, subset='test', sample_rate=sample_rate)
+            timit_train.save_back()
+            timit_test.save_back()
+    
+    def save_back(self):
+        """
+        Writes the dataset back to disk. Useful for resampling
+        """
+        dl = DataLoader(self, num_workers=10)
+        for wav, path in tqdm(dl, f'Resampling TIMIT dataset ({self.subset})'):
+            path = PurePath(path[0])
+            sf.write(file=path, data=wav[0].numpy(), samplerate=self.sample_rate)
                 
     def get_infos(self):
         """Get dataset infos (for publishing models).
