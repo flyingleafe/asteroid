@@ -1,0 +1,51 @@
+defaults:
+    - model: baseline
+
+dset:
+    timit: ${env:HOME}/datasets/TIMIT
+    noises: ${env:HOME}/datasets/noises
+    
+    mixture_train:
+        type: 'random'
+        snr_range: [-25, -5]
+        repeat_factor: 10
+        
+    mixture_val:
+        type: 'fixed'
+        snrs: [-25, -20, -15, -10, -5]
+    
+    val_fraction: 0.1
+    
+    mixture_test:
+        type: 'fixed'
+        snrs: [-30, -25, -20, -15, -10, -5, 0]
+    
+workspace_dir: ${env:HOME}/workspace
+sample_rate: 8000
+random_seed: 42
+
+batch_size: 32
+crop_length: 24000
+dl_workers: 5
+
+# model-related
+loss: "sisdr"
+
+# optimization-related
+lr: 1e-3
+reduce_lr_patience: 3
+
+early_stopping:
+    monitor: 'val_loss'
+    patience: 10
+
+model_checkpoint:
+    filename: '{epoch:02d}-{val_loss:.2f}'
+    monitor: "val_loss"
+    mode: "min"
+    save_top_k: 5
+
+max_epochs: 300
+
+
+    

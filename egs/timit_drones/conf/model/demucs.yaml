@@ -1,0 +1,6 @@
+model:
+    _target_: asteroid.Demucs
+    
+# particular valid crop length
+crop_length: 24149
+loss: "l1"
