@@ -40,6 +40,28 @@ class MagnitudeIRMSystem(System):
         loss = self.loss_func(est_irm, true_irm)
         return loss
 
+    
+class SMoLNetSystem(System):
+    def common_step(self, batch, batch_nb, train=True):
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        mix_tf = self.model.forward_encoder(mix)
+        clean_tf = self.model.forward_encoder(clean)
+        
+        model_output = self.model.forward_masker(mix_tf)
+        
+        if self.model.target == "cIRM":
+            raise NotImplementedError('Too lazy to fully implement cIRM now!')
+            
+        elif self.model.target == "TMS":
+            loss = self.loss_func(model_output, mag(clean_tf))
+        else:
+            loss = self.loss_func(model_output, clean_tf)
+        
+        return loss
+
 
 def sisdr_loss_wrapper(est_target, target):
     return singlesrc_neg_sisdr(est_target.squeeze(1), target).mean()
@@ -102,6 +124,8 @@ def prepare_system(args, model, train_loader, val_loader):
     if isinstance(model, asteroid.RegressionFCNN):
         model.compute_scaler(train_loader)
         cls = MagnitudeIRMSystem
+    elif isinstance(model, asteroid.SMoLnet):
+        cls = SMoLNetSystem
     else:
         cls = System
         
@@ -141,7 +165,8 @@ def main(args):
         trainer = Trainer(max_epochs=args.max_epochs, fast_dev_run=True,
                           logger=tb_logger, callbacks=callbacks, deterministic=True)
     else:
-        trainer = Trainer(max_epochs=args.max_epochs, gpus=-1, accelerator='dp',
+        gpus = args.get('gpus', -1)
+        trainer = Trainer(max_epochs=args.max_epochs, gpus=gpus, accelerator='dp',
                           logger=tb_logger, callbacks=callbacks, deterministic=True)
     trainer.fit(system)
     

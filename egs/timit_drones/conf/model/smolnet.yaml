@@ -1,0 +1,4 @@
+model:
+    _target_: asteroid.SMoLnet
+    
+loss: "mse"

@@ -4,6 +4,7 @@ egs/**/exp
 # Where we'll save pretrained models git folders.
 pretrained_models
 *.pt
+*.pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

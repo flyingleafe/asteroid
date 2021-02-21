@@ -10,6 +10,7 @@ from .lstm_tasnet import LSTMTasNet
 from .demask import DeMask
 from .wave_unet import WaveUNet
 from .demucs import Demucs
+from .smolnet import SMoLnet
 from .fcnn_regression import RegressionFCNN
 
 # Sharing-related
@@ -27,6 +28,7 @@ __all__ = [
     "DCCRNet",
     "WaveUNet",
     "Demucs",
+    "SMoLnet",
     "RegressionFCNN",
     "save_publishable",
     "upload_publishable",
