@@ -1,6 +1,15 @@
 model:
     _target_: asteroid.Demucs
     
+    
+dset:
+    mixture_train:
+        repeat_factor: 30
+
+    
 # particular valid crop length
 crop_length: 24149
 loss: "l1"
+
+lr: 3e-4
+reduce_lr_patience: 5
