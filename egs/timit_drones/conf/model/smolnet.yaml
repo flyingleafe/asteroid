@@ -2,4 +2,5 @@ model:
     _target_: asteroid.SMoLnet
     
 loss: "mse"
-reduce_lr_patience: 5
+lr: 1e-4
+crop_length: 10240

@@ -28,7 +28,8 @@ def data_feed_process(queue, signal_queue, model, test_set):
     loader = DataLoader(test_set, num_workers=2)
     
     if model is not None:
-        model = model.cuda()
+        if torch.cuda.is_available():
+            model = model.cuda()
         model.eval()
     
     def model_run(mix):
@@ -37,10 +38,11 @@ def data_feed_process(queue, signal_queue, model, test_set):
         else:
             return model(mix.cuda()).squeeze(1).detach().cpu()
         
-    for mix, clean, snr in loader:
-        enh = model_run(mix)
-        queue.put((mix, clean, enh, snr))
-        
+    with torch.no_grad():
+        for mix, clean, snr in loader:
+            enh = model_run(mix)
+            queue.put((mix, clean, enh, snr))
+
     # wait for a signal to end the process
     signal_queue.get()
 
