@@ -48,4 +48,18 @@ model_checkpoint:
 max_epochs: 300
 
 
+# evaluation config (TBD)
+eval:
+    models:
+        - baseline: 'baseline_model_v1.pt'
+        - waveunet_v1: 'waveunet_model_adapt.pt'
+        - dcunet_20: 'dcunet_20_random_v2.pt'
+        - dccrn: 'dccrn_random_v1.pt'
+        - smolnet: 'SMoLnet.pt'
+        - dprnn: 'dprnn_model.pt'
+        - conv_tasnet: 'convtasnet_model.pt'
+        - dptnet: 'dptnet_model.pt'
+        - demucs: 'Demucs.pt'
+    directory: 'eval_results_final'
+
     

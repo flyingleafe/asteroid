@@ -9,6 +9,8 @@ from torch.utils.data import Dataset
 from torch.utils.data._utils.collate import default_collate
 from collections.abc import Iterable
 from tqdm import tqdm
+from asteroid.separate import _resample
+
 
 from typing import Optional, Union, List
 from pathlib import Path, PurePath
@@ -125,6 +127,8 @@ class CachedWavSet(Dataset):
         self.wav_paths = [os.path.join(data_dir, p) for p in all_files if p.endswith(".wav")]
         self.cache = [None]*len(self.wav_paths)
         
+        self.resamplers = {}
+        
         if precache:
             for i in tqdm(range(len(self)), 'Precaching audio'):
                 _ = self[i]
@@ -136,7 +140,7 @@ class CachedWavSet(Dataset):
         cached = self.cache[idx]
         path = self.wav_paths[idx]
         if cached is None:
-            cached, _ = lr.load(path, sr=self.sample_rate, mono=True, dtype='float32')
+            cached, _ = lr.load(path, mono=True, sr=self.sample_rate, dtype='float32')
             self.cache[idx] = cached
 
         if self.with_path:

@@ -148,25 +148,30 @@ class UNetGANGenerator(Waveunet):
 class UNetGANDiscriminator(nn.Module):
     """
     """
-    def __init__(self, layers=[64, 128, 256]):
+    def __init__(self, layers=[64, 128, 256], input_size=16384, sigmoid_activation=True):
         super().__init__()
+        self.input_size = input_size # x2 - since concatenated
+        
         prev_ch = 1
         main_layers = []
         for ch in layers:
             main_layers.append(DownSamplingLayer(prev_ch, ch, stride=2))
             prev_ch = ch
             
+        linear_layer_size = int(self.input_size * 2 / (2**len(layers)))
         main_layers.extend([
             nn.Conv1d(prev_ch, 1, kernel_size=1, stride=1, padding=0),
-            nn.Sigmoid()
+            nn.Linear(linear_layer_size, 1)
         ])
+        
+        if sigmoid_activation:
+            main_layers.append(nn.Sigmoid())
         
         self.main = nn.Sequential(*main_layers)
         
     def forward(self, mixture, clean_or_enh):
-        mixture = mixture.unsqueeze(1)
         inp = torch.cat([mixture, clean_or_enh], dim=-1)
-        return self.main(inp).mean(dim=-1)
+        return self.main(inp)
     
     
 ###

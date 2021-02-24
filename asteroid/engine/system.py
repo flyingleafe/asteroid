@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from argparse import Namespace
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from asteroid.masknn import UNetGANGenerator, UNetGANDiscriminator
+from asteroid.masknn.wavenet import apply_model_chunked
 from collections import OrderedDict
 
 from ..utils import flatten_dict, unsqueeze_to_3d
@@ -196,6 +197,9 @@ class System(pl.LightningModule):
         return dic
 
     
+# class GANSystem()    
+
+    
 class UNetGAN(pl.LightningModule):
 
     def __init__(
@@ -203,6 +207,7 @@ class UNetGAN(pl.LightningModule):
         mse_weight: float = 20,
         lr_g: float = 2e-4,
         lr_d: float = 2e-4,
+        train_only_discriminator = False,
         **kwargs
     ):
         super().__init__()
@@ -211,13 +216,18 @@ class UNetGAN(pl.LightningModule):
         # networks
         self.generator = UNetGANGenerator()
         self.discriminator = UNetGANDiscriminator()
+        self.train_only_discriminator = train_only_discriminator
 
-    def forward(self, z):
-        return self.generator(z)
+    def forward(self, wav):
+        wav = unsqueeze_to_3d(wav)
+        if wav.shape[-1] == 16384:
+            return self.generator(wav)
+        else:
+            return apply_model_chunked(self.generator, wav, 16384)
 
     def adversarial_loss(self, y_hat, y):
         return F.binary_cross_entropy(y_hat, y)
-
+    
     def training_step(self, batch, batch_idx, optimizer_idx):
         mix, clean = batch
         
@@ -250,7 +260,7 @@ class UNetGAN(pl.LightningModule):
         # train discriminator
         if optimizer_idx == 1:
             # Measure discriminator's ability to classify real from generated samples
-            clean_disc_vals = self.discriminator(mix, clean.unsqueeze(1))
+            clean_disc_vals = self.discriminator(mix, clean)
             enh_disc_vals = self.discriminator(mix, enh.detach())
 
             real_loss = self.adversarial_loss(clean_disc_vals, real)
