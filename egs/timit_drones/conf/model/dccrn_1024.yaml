@@ -1,0 +1,12 @@
+model:
+    _target_: asteroid.DCCRNet
+    stft_n_filters: 1024
+    stft_kernel_size: 1024
+    stft_stride: 256
+    
+dset:
+    mixture_train:
+        repeat_factor: 30
+
+model_version: 'stft1024'
+reduce_lr_patience: 5

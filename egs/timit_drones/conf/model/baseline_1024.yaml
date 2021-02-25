@@ -1,0 +1,9 @@
+model:
+    _target_: asteroid.RegressionFCNN
+    n_filters: 1024
+    kernel_size: 1024
+    stride: 256
+    
+loss: "mse"
+lr: 1e-4
+reduce_lr_patience: 5
