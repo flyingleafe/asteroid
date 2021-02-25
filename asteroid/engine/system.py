@@ -235,8 +235,8 @@ class UNetGAN(pl.LightningModule):
         clean = unsqueeze_to_3d(clean)
         
         batch_size = mix.shape[0]
-        fake = torch.zeros((batch_size, 1)).type_as(mix)
-        real = torch.ones((batch_size, 1)).type_as(mix)
+        fake = torch.zeros((batch_size, 1, 1)).type_as(mix)
+        real = torch.ones((batch_size, 1, 1)).type_as(mix)
         enh = self.generator(mix)
         
         # train generator

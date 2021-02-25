@@ -1,3 +1,4 @@
+import hydra
 import torch
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ from queue import Empty
 from tqdm import trange, tqdm
 from pypesq import pesq
 
-from asteroid import BaseModel
+from asteroid.models import BaseModel
 from asteroid.metrics import get_metrics
 
 def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False):
@@ -232,7 +233,7 @@ def eval_all_and_plot(models, test_set, directory, subset_ixs=None, plot_name=No
 
 @hydra.main(config_path='conf', config_name='config')
 def main(args):
-    
+    pass
 
 
 if __name__ == "__main__":
