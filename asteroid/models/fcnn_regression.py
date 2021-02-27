@@ -55,7 +55,10 @@ class RegressionFCNN(BaseEncoderMaskerDecoder):
                 layers.append(nn.Dropout(dropout))
             prev_dim = n_hid
     
-        layers.append(nn.Linear(prev_dim, self.n_freq))
+        layers.extend([
+            nn.Linear(prev_dim, self.n_freq),
+            #nn.Sigmoid()
+        ])
         masker = nn.Sequential(*layers)
         super().__init__(encoder, masker, decoder)
         
