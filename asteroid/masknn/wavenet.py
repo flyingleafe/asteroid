@@ -39,7 +39,7 @@ class DownSamplingLayer(nn.Module):
             nn.Conv1d(channel_in, channel_out, kernel_size=kernel_size,
                       stride=stride, padding=padding, dilation=dilation),
             nn.BatchNorm1d(channel_out),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True)
+            nn.LeakyReLU(negative_slope=0.1)
         )
 
     def forward(self, ipt):
@@ -52,7 +52,7 @@ class UpSamplingLayer(nn.Module):
             nn.Conv1d(channel_in, channel_out, kernel_size=kernel_size,
                       stride=stride, padding=padding),
             nn.BatchNorm1d(channel_out),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.LeakyReLU(negative_slope=0.1),
         )
 
     def forward(self, ipt):
@@ -106,6 +106,18 @@ class Waveunet(nn.Module):
             nn.Conv1d(1 + self.channels_interval, self.n_src, kernel_size=1, stride=1),
             nn.Tanh()
         )
+        
+    def valid_length(self, length):
+        min_length = 2**self.n_layers
+        
+        if length < min_length:
+            return min_length
+        else:
+            rem = length % min_length
+            if rem == 0:
+                return length
+            else:
+                return min_length * (length // min_length + 1)
 
     def forward(self, _input):
         '''
@@ -141,32 +153,43 @@ class Waveunet(nn.Module):
         
         
 class UNetGANGenerator(Waveunet):
-    def __init__(self, middle_layer=[(3, 1), (3, 2), (3, 4)], **kwargs):
-        super().__init__(middle_layer=middle_layer, **kwargs)
+    def __init__(self, n_layers=8, middle_layer=[(3, 1), (3, 2), (3, 4)], **kwargs):
+        super().__init__(n_layers=n_layers, middle_layer=middle_layer, **kwargs)
 
 
 class UNetGANDiscriminator(nn.Module):
     """
     """
-    def __init__(self, layers=[64, 128, 256]):
+    def __init__(self, layers=[64, 128, 256], input_size=16384,
+                 concat_type='channels', sigmoid_activation=True, **kwargs):
         super().__init__()
-        prev_ch = 1
+        self.input_size = input_size # x2 - since concatenated
+        self.concat_type = concat_type
+        
+        prev_ch = 2 if concat_type == 'channels' else 1
         main_layers = []
         for ch in layers:
             main_layers.append(DownSamplingLayer(prev_ch, ch, stride=2))
             prev_ch = ch
             
+        linear_layer_size = int(self.input_size / (2**len(layers)))
+        if concat_type == 'time':
+            linear_layer_size *= 2
+            
         main_layers.extend([
             nn.Conv1d(prev_ch, 1, kernel_size=1, stride=1, padding=0),
-            nn.Sigmoid()
+            nn.Linear(linear_layer_size, 1)
         ])
+        
+        if sigmoid_activation:
+            main_layers.append(nn.Sigmoid())
         
         self.main = nn.Sequential(*main_layers)
         
     def forward(self, mixture, clean_or_enh):
-        mixture = mixture.unsqueeze(1)
-        inp = torch.cat([mixture, clean_or_enh], dim=-1)
-        return self.main(inp).mean(dim=-1)
+        dim = 1 if self.concat_type == 'channels' else -1
+        inp = torch.cat([mixture, clean_or_enh], dim=1)
+        return self.main(inp)
     
     
 ###

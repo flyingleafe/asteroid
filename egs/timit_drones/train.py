@@ -1,6 +1,7 @@
 import hydra
 import logging
 import os
+import sys
 import torch
 import torch.nn.functional as F
 import asteroid
@@ -11,7 +12,7 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, random_split
 from asteroid.data import TimitDataset
 from asteroid.data.utils import CachedWavSet, RandomMixtureSet, FixedMixtureSet
-from asteroid_filterbanks.transforms import mag
+from asteroid_filterbanks.transforms import mag, reim
 
 from pytorch_lightning import Trainer, seed_everything, loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -25,6 +26,17 @@ from load_dataset import download_datasets
 
 logger = logging.getLogger(__name__)
 
+def perfect_cirm(noisy, clean, K=10, c=0.1):
+    Xr, Xi = reim(noisy)
+    Sr, Si = reim(clean)
+    
+    norm = Xr**2 + Xi**2
+    Cr = (Xr*Sr + Xi*Si) / norm
+    Ci = (Xr*Si + Xi*Sr) / norm
+    
+    Cr_masked = K*torch.tanh(c*Cr)
+    Ci_masked = K*torch.tanh(c*Ci)
+    return torch.cat((Cr_masked, Ci_masked), dim=-2)
 
 class MagnitudeIRMSystem(System):
     def common_step(self, batch, batch_nb, train=True):
@@ -79,7 +91,8 @@ class SMoLNetSystem(System):
         model_output = self.model.forward_masker(mix_tf)
         
         if self.model.target == "cIRM":
-            raise NotImplementedError('Too lazy to fully implement cIRM now!')
+            target_mask = perfect_cirm(mix_tf, clean_tf)
+            loss = self.loss_func(model_output, target_mask)
             
         elif self.model.target == "TMS":
             loss = self.loss_func(model_output, mag(clean_tf))
@@ -88,7 +101,20 @@ class SMoLNetSystem(System):
         
         return loss
 
+class PhasenSystem(System):
+    def common_step(self, batch, batch_nb, train=True):
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        mix_tf = self.model.forward_encoder(mix)
+        clean_tf = self.model.forward_encoder(clean)
+        est_masks = self.model.forward_masker(mix_tf)
+        est_tf = self.model.apply_masks(mix_tf, est_masks)
+        
+        return self.loss_func(est_tf, clean_tf)
 
+    
 def sisdr_loss_wrapper(est_target, target):
     return singlesrc_neg_sisdr(est_target.squeeze(1), target).mean()
 
@@ -102,6 +128,22 @@ def vae_loss_wrapper(est_target, target, mu, logvar):
 
 def l1_loss_wrapper(est_target, target):
     return F.l1_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
+
+def phasen_loss_wrapper(est_target, target):
+    est_mag = mag(est_target)
+    true_mag = mag(target)
+    est_mag_comp = est_mag**0.3
+    true_mag_comp = true_mag**0.3
+    
+    mag_loss = F.mse_loss(est_mag_comp, true_mag_comp)
+
+    # scale the complex spectrograms' magniture to the power 0.3 as well
+    true_comp_coeffs = (true_mag_comp/(1e-8+true_mag)).repeat(1,2,1)
+    est_comp_coeffs = (est_mag_comp/(1e-8+est_mag)).repeat(1,2,1)
+    phase_loss = F.mse_loss(est_target * est_comp_coeffs, target * true_comp_coeffs)
+    
+    return (mag_loss + phase_loss) / 2 
+    
 
 def prepare_mixture_set(clean, noises, params, **kwargs):
     mix_type = params.pop('type')
@@ -145,6 +187,8 @@ def prepare_system(args, model, train_loader, val_loader):
     
     if args.loss == "sisdr":
         loss = sisdr_loss_wrapper
+    elif args.loss == "phasen":
+        loss = phasen_loss_wrapper
     elif args.loss == "l1":
         loss = l1_loss_wrapper
     elif args.loss in ("l2", "mse"):
@@ -162,6 +206,8 @@ def prepare_system(args, model, train_loader, val_loader):
         cls = MagnitudeVAESystem
     elif isinstance(model, asteroid.SMoLnet):
         cls = SMoLNetSystem
+    elif isinstance(model, asteroid.Phasen):
+        cls = PhasenSystem
     else:
         cls = System
         
@@ -175,7 +221,10 @@ def main(args):
     seed_everything(args.random_seed)
     train_loader, val_loader = prepare_dataloaders(args)
     
-    model = hydra.utils.instantiate(args.model)
+    model_params = dict(args.model)
+    model_params['sample_rate'] = args.sample_rate
+    
+    model = hydra.utils.instantiate(model_params)
     model_version = args.get('model_version', None)
     model_name = model.__class__.__name__
     logger.info(f'Training model: {model_name}')
@@ -197,22 +246,28 @@ def main(args):
     if args.model_checkpoint:
         callbacks.append(ModelCheckpoint(**args.model_checkpoint))
     
-    if args.get('fast_dev_run', False):
+    is_fast_dev_run = args.get('fast_dev_run', False)
+    
+    if is_fast_dev_run:
         trainer = Trainer(max_epochs=args.max_epochs, fast_dev_run=True,
                           logger=tb_logger, callbacks=callbacks, deterministic=True)
+        
+        trainer.fit(system)
+        
     else:
         gpus = args.get('gpus', -1)
         trainer = Trainer(max_epochs=args.max_epochs, gpus=gpus, accelerator='dp',
                           logger=tb_logger, callbacks=callbacks, deterministic=True)
-    trainer.fit(system)
-    
-    if model_version:
-        model_path = models_dir / f'{model_name}_{model_version}.pt'
-    else:
-        model_path = models_dir / f'{model_name}.pt'
         
-    torch.save(model.serialize(), str(model_path))
-    logging.info(f'Saved the trained model to {model_path}')
+        trainer.fit(system)
+    
+        if model_version:
+            model_path = models_dir / f'{model_name}_{model_version}.pt'
+        else:
+            model_path = models_dir / f'{model_name}.pt'
+
+        torch.save(model.serialize(), str(model_path))
+        logging.info(f'Saved the trained model to {model_path}')
 
     
 if __name__ == "__main__":

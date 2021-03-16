@@ -6,13 +6,14 @@ class WaveUNet(BaseWavenetModel):
         wavenet = Waveunet(**wavenet_kwargs)
         super().__init__(wavenet, sample_rate=sample_rate)
         self.wavenet_kwargs = wavenet_kwargs
-        self.input_length = input_length
+        self.input_length = input_length  # deprecated
     
     def apply_wavenet(self, wav):
-        if wav.shape[-1] == self.input_length:
+        valid_length = self.wavenet.valid_length(wav.shape[-1])
+        if wav.shape[-1] == valid_length:
             return self.wavenet(wav)
         else:
-            return apply_model_chunked(self.wavenet, wav, self.input_length)
+            return apply_model_chunked(self.wavenet, wav, valid_length)
     
     def get_model_args(self):
         #return empty atm as configs are hardcoded for now

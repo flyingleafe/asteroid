@@ -1,0 +1,9 @@
+model:
+    _target_: asteroid.SMoLnet
+    target: "TMS"
+    
+model_version: "TMS"
+loss: "mse"
+lr: 1e-4
+crop_length: 10240
+batch_size: 128

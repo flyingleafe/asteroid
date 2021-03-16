@@ -1,9 +1,11 @@
 import torch
+import numpy as np
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from argparse import Namespace
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from asteroid.masknn import UNetGANGenerator, UNetGANDiscriminator
+from asteroid.masknn.wavenet import apply_model_chunked
 from collections import OrderedDict
 
 from ..utils import flatten_dict, unsqueeze_to_3d
@@ -196,6 +198,9 @@ class System(pl.LightningModule):
         return dic
 
     
+# class GANSystem()    
+
+    
 class UNetGAN(pl.LightningModule):
 
     def __init__(
@@ -203,6 +208,11 @@ class UNetGAN(pl.LightningModule):
         mse_weight: float = 20,
         lr_g: float = 2e-4,
         lr_d: float = 2e-4,
+        training_phase = 0,
+        good_d_loss = 0.0001,
+        good_adv_loss = 0.001,
+        d_loss_accum_steps = 20,
+        disc_concat_type = 'channels',
         **kwargs
     ):
         super().__init__()
@@ -210,68 +220,141 @@ class UNetGAN(pl.LightningModule):
 
         # networks
         self.generator = UNetGANGenerator()
-        self.discriminator = UNetGANDiscriminator()
+        self.discriminator = UNetGANDiscriminator(concat_type=disc_concat_type)
+        self.training_phase = training_phase
+        self.automatic_optimization = False
+        self.good_d_loss = good_d_loss
+        self.good_adv_loss = good_adv_loss
+        self.d_loss_accum_steps = d_loss_accum_steps
+        self.last_d_losses = []
 
-    def forward(self, z):
-        return self.generator(z)
+    def forward(self, wav):
+        wav = unsqueeze_to_3d(wav)
+        if wav.shape[-1] == 16384:
+            return self.generator(wav)
+        else:
+            return apply_model_chunked(self.generator, wav, 16384)
 
     def adversarial_loss(self, y_hat, y):
         return F.binary_cross_entropy(y_hat, y)
-
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    
+    def compute_generator_loss(self, batch, batch_idx):
         mix, clean = batch
-        
         mix = unsqueeze_to_3d(mix)
         clean = unsqueeze_to_3d(clean)
         
         batch_size = mix.shape[0]
-        fake = torch.zeros((batch_size, 1)).type_as(mix)
-        real = torch.ones((batch_size, 1)).type_as(mix)
+        real = torch.ones((batch_size, 1, 1)).type_as(mix)
         enh = self.generator(mix)
-        
-        # train generator
-        if optimizer_idx == 0:
-            disc_vals = self.discriminator(mix, enh)
+    
+        disc_vals = self.discriminator(mix, enh)
             
-            mse_loss = F.mse_loss(clean, enh)
-            adv_loss = self.adversarial_loss(disc_vals, real)
+        mse_loss = F.mse_loss(clean, enh)
+        adv_loss = self.adversarial_loss(disc_vals, real)
+        lm = self.hparams.mse_weight
+        
+        return adv_loss + lm * mse_loss, adv_loss
+    
+    def compute_discriminator_loss(self, batch, batch_idx):
+        mix, clean = batch
+        
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        batch_size = mix.shape[0]        
+        fake = torch.zeros((batch_size, 1, 1)).type_as(mix)
+        real = torch.ones((batch_size, 1, 1)).type_as(mix)
+        enh = self.generator(mix).detach()
+        
+        # Put everything through discriminator in one pass
+        double_mix = torch.cat([mix, mix], dim=0)
+        clean_enh = torch.cat([clean, enh], dim=0)
+        disc_vals = self.discriminator(double_mix, clean_enh)
+        
+        real_fake = torch.cat([real, fake], dim=0)
+        return self.adversarial_loss(disc_vals, real_fake)
+
+    def set_training_phase(self, phase):
+        assert phase in (0, 1)
+        self.training_phase = phase
+        self.log("training_phase", phase, logger=True)
+        
+    def accumulate_d_loss(self, loss):
+        self.last_d_losses.append(loss)
+        if len(self.last_d_losses) > self.d_loss_accum_steps:
+            self.last_d_losses = self.last_d_losses[-self.d_loss_accum_steps:]
+        
+        if len(self.last_d_losses) == self.d_loss_accum_steps:
+            return np.mean(self.last_d_losses)
+        return None
+    
+    def reset_d_loss(self):
+        self.last_d_losses = []
+    
+    def training_step(self, batch, batch_idx, optimizer_idx):        
+        opt_gen, opt_dis = self.optimizers()
+
+        # generator phase
+        if self.training_phase == 0:
+            with opt_gen.toggle_model():
+                g_loss, adv_loss = self.compute_generator_loss(batch, batch_idx)
+                self.log("g_loss", g_loss, logger=True, prog_bar=True)
+                opt_gen.zero_grad()
+                self.manual_backward(g_loss)
+                opt_gen.step()
+
+                acc_loss = self.accumulate_d_loss(adv_loss.item())
+                if acc_loss is not None and acc_loss <= self.good_adv_loss:
+                    self.reset_d_loss()
+                    self.set_training_phase(1)
             
-            lm = self.hparams.mse_weight
-            g_loss = adv_loss + lm * mse_loss
-        
-            tqdm_dict = {'g_loss': g_loss, 'mse_loss': mse_loss}
-            output = OrderedDict({
-                'loss': g_loss,
-                'progress_bar': tqdm_dict,
-                'log': tqdm_dict
-            })
-            return output
+            return g_loss
+                
+        elif self.training_phase == 1:
+            with opt_dis.toggle_model():
+                d_loss = self.compute_discriminator_loss(batch, batch_idx)
+                self.log("d_loss", d_loss, logger=True, prog_bar=True)
+                opt_dis.zero_grad()
+                self.manual_backward(d_loss)
+                opt_dis.step()
 
-        # train discriminator
-        if optimizer_idx == 1:
-            # Measure discriminator's ability to classify real from generated samples
-            clean_disc_vals = self.discriminator(mix, clean.unsqueeze(1))
-            enh_disc_vals = self.discriminator(mix, enh.detach())
+                acc_loss = self.accumulate_d_loss(d_loss.item())
+                if acc_loss is not None and acc_loss <= self.good_d_loss:
+                    self.reset_d_loss()
+                    self.set_training_phase(0)
 
-            real_loss = self.adversarial_loss(clean_disc_vals, real)
-            fake_loss = self.adversarial_loss(enh_disc_vals, fake)
-        
-            d_loss = real_loss + fake_loss
-            tqdm_dict = {'d_loss': d_loss}
-            output = OrderedDict({
-                'loss': d_loss,
-                'progress_bar': tqdm_dict,
-                'log': tqdm_dict
-            })
-            return output
-        
-    def validation_step(self, batch, batch_nb):
+            return d_loss
+                
+        else:
+            raise ValueError('training phase bad')
+    
+    def validation_step(self, batch, batch_idx):
         mix, clean = batch
         mix = unsqueeze_to_3d(mix)
         clean = unsqueeze_to_3d(clean)
+        
+        batch_size = mix.shape[0]
+        fake = torch.zeros((batch_size, 1, 1)).type_as(mix)
+        real = torch.ones((batch_size, 1, 1)).type_as(mix)
         enh = self.generator(mix)
+        
+        clean_disc_vals = self.discriminator(mix, clean)
+        enh_disc_vals = self.discriminator(mix, enh)
+        
+        real_loss = self.adversarial_loss(clean_disc_vals, real)
+        fake_loss = self.adversarial_loss(enh_disc_vals, fake)
+        val_d_loss = (real_loss + fake_loss) / 2
+        
         mse_loss = F.mse_loss(clean, enh)
-        self.log("val_loss", mse_loss, on_epoch=True, prog_bar=True)
+        adv_loss = self.adversarial_loss(enh_disc_vals, real)
+        lm = self.hparams.mse_weight
+        val_g_loss = adv_loss + lm * mse_loss
+        
+        self.log("val_g_loss", val_g_loss, on_epoch=True, prog_bar=True)
+        self.log("val_d_loss", val_d_loss, on_epoch=True, prog_bar=True)
+        self.log("val_mse_loss", mse_loss, on_epoch=True)
+        
+        return val_g_loss, val_d_loss
 
     def configure_optimizers(self):
         lr_g = self.hparams.lr_g

@@ -1,0 +1,4 @@
+model:
+    _target_: asteroid.Phasen
+    
+loss: "phasen"

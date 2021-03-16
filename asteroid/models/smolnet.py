@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn.functional as F
 from torch import nn
 from .base_models import BaseEncoderMaskerDecoder
@@ -45,7 +46,8 @@ class SMoLnet(BaseEncoderMaskerDecoder):
         n_filters=2048,
         kernel_size=2048,
         stride=1024,
-        sample_rate=8000
+        sample_rate=8000,
+        total_layers=13
     ):
         encoder, decoder = make_enc_dec(
             "stft",
@@ -64,11 +66,15 @@ class SMoLnet(BaseEncoderMaskerDecoder):
         layers = []
         prev_ch = input_channels
         
-        for idx in range(10):
+        num_dilated_layers = int(np.log2(n_filters / 2))
+        num_square_layers = total_layers - num_dilated_layers
+        assert num_square_layers > 0
+        
+        for idx in range(num_dilated_layers):
             layers.append(SMoLnetDilatedLayer(prev_ch, self.inner_channels, dilation=2**idx))
             prev_ch = self.inner_channels
-            
-        for idx in range(3):
+
+        for idx in range(num_square_layers):
             layers.append(SMoLnetLateLayer(self.inner_channels, self.inner_channels))
             
         if self.target == "TMS":
