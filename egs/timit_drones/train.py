@@ -40,6 +40,32 @@ class MagnitudeIRMSystem(System):
         loss = self.loss_func(est_irm, true_irm)
         return loss
 
+class MagnitudeVAESystem(System):
+    def common_step(self, batch, batch_nb, train=True):
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        mix_tf = self.model.forward_encoder(mix)
+        clean_tf = self.model.forward_encoder(clean)
+        
+        true_irm = torch.minimum(mag(clean_tf) / mag(mix_tf), torch.tensor(1).type_as(mix_tf))
+        est_irm, mu, logvar = self.model.forward_masker(mix_tf)
+        
+        #loss = self.loss_func(est_irm, true_irm, mu, logvar)
+        loss = self.loss_func(est_irm, true_irm)
+
+        #loss_mse = self.loss_func(est_irm, true_irm)
+        # loss kld taken from - https://gitlab.inria.fr/smostafa/avse-vae/-/blob/master/train_VAE.py
+        #loss_kld = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
+
+        #pytorch kl - issue - goes to nan - log 0 ?
+        #loss_kld = F.kl_div(mu, logvar)
+        #loss = loss_mse + loss_kld
+
+        #import pdb; pdb.set_trace()
+        return loss
+
     
 class SMoLNetSystem(System):
     def common_step(self, batch, batch_nb, train=True):
@@ -68,6 +94,11 @@ def sisdr_loss_wrapper(est_target, target):
 
 def mse_loss_wrapper(est_target, target):
     return F.mse_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
+
+def vae_loss_wrapper(est_target, target, mu, logvar):
+    recon = torch.sum( torch.log(est_target) + target/(est_target) )
+    KLD = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
+    return recon + KLD
 
 def l1_loss_wrapper(est_target, target):
     return F.l1_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
@@ -118,12 +149,17 @@ def prepare_system(args, model, train_loader, val_loader):
         loss = l1_loss_wrapper
     elif args.loss in ("l2", "mse"):
         loss = mse_loss_wrapper
+    elif args.loss == "vae_loss":
+        loss = vae_loss_wrapper
     else:
         raise ValueError(f'Unsupported loss type `{args.loss}`')
     
     if isinstance(model, asteroid.RegressionFCNN):
         model.compute_scaler(train_loader)
         cls = MagnitudeIRMSystem
+    elif isinstance(model, asteroid.VAE):
+        model.compute_scaler(train_loader)
+        cls = MagnitudeVAESystem
     elif isinstance(model, asteroid.SMoLnet):
         cls = SMoLNetSystem
     else:
