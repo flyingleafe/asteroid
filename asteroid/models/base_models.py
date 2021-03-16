@@ -340,8 +340,12 @@ class BaseGAN(BaseModel):
     """Base class for GANs
     """
     def __init__(self, generator, discriminator):
+        super().__init__(sample_rate=getattr(generator, "sample_rate", None))
         self.generator = generator
         self.discriminator = discriminator
+        
+    def forward(self, wav):
+        return self.generator(wav)
 
 
 @script_if_tracing

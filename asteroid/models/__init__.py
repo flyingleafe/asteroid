@@ -12,6 +12,7 @@ from .wave_unet import WaveUNet
 from .demucs import Demucs
 from .smolnet import SMoLnet
 from .fcnn_regression import RegressionFCNN
+from .phasen import Phasen
 
 # Sharing-related
 from .publisher import save_publishable, upload_publishable
@@ -30,6 +31,7 @@ __all__ = [
     "Demucs",
     "SMoLnet",
     "RegressionFCNN",
+    "Phasen",
     "save_publishable",
     "upload_publishable",
 ]

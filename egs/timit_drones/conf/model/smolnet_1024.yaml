@@ -8,3 +8,4 @@ model_version: 'stft1024'
 loss: "mse"
 lr: 1e-4
 crop_length: 10240
+batch_size: 128

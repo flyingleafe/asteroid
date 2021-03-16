@@ -29,6 +29,7 @@ class RegressionFCNN(BaseEncoderMaskerDecoder):
         n_filters=256,
         kernel_size=256,
         stride=128,
+        use_sigmoid=True,
         sample_rate=8000
     ):
         encoder, decoder = make_enc_dec(
@@ -55,10 +56,10 @@ class RegressionFCNN(BaseEncoderMaskerDecoder):
                 layers.append(nn.Dropout(dropout))
             prev_dim = n_hid
     
-        layers.extend([
-            nn.Linear(prev_dim, self.n_freq),
-            #nn.Sigmoid()
-        ])
+        layers.append(nn.Linear(prev_dim, self.n_freq))
+        if use_sigmoid:
+            layers.append(nn.Sigmoid())
+        
         masker = nn.Sequential(*layers)
         super().__init__(encoder, masker, decoder)
         

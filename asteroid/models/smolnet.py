@@ -73,7 +73,7 @@ class SMoLnet(BaseEncoderMaskerDecoder):
         for idx in range(num_dilated_layers):
             layers.append(SMoLnetDilatedLayer(prev_ch, self.inner_channels, dilation=2**idx))
             prev_ch = self.inner_channels
-            
+
         for idx in range(num_square_layers):
             layers.append(SMoLnetLateLayer(self.inner_channels, self.inner_channels))
             
