@@ -22,7 +22,8 @@ from torch.utils.data import DataLoader, ConcatDataset, random_split, Subset
 from asteroid.data import TimitDataset
 from asteroid.data.utils import CachedWavSet, FixedMixtureSet
 from tqdm import trange, tqdm
-from asteroid import DCUNet, DCCRNet, DPRNNTasNet, ConvTasNet, RegressionFCNN, WaveUNet, DPTNet, Demucs, SMoLnet
+from asteroid import VAE, DCUNet, DCCRNet, DPRNNTasNet, ConvTasNet, RegressionFCNN, WaveUNet, DPTNet, Demucs, SMoLnet
+from asteroid import AutoEncoder 
 #from asteroid import DCUNet, DCCRNet, DPRNNTasNet, ConvTasNet, RegressionFCNN, WaveUNet, DPTNet
 from asteroid.engine.system import UNetGAN
 
@@ -60,6 +61,8 @@ metrics_names = {
 model_labels = {
     'input': 'Input',
     'baseline': 'Baseline DNN',
+    'vae': 'VAE',
+    'auto_encoder': 'AutoEncoder',
     'baseline_v2': 'Baseline DNN (L1 loss)',
     'baseline_proper_mse': 'Baseline DNN (fixed test set)',
     'waveunet_v1': 'Wave-U-Net',
@@ -72,18 +75,6 @@ model_labels = {
     'demucs': 'Demucs',
 }
 
-#model_labels = {
-#    'input': 'Input',
-#    'baseline': 'Baseline DNN',
-#    'baseline_v2': 'Baseline DNN (L1 loss)',
-#    'baseline_proper_mse': 'Baseline DNN (fixed test set)',
-#    'waveunet_v1': 'Wave-U-Net',
-#    'dcunet_20': 'DCUNet-20',
-#    'dccrn': 'DCCRN',
-#    'dprnn': 'DPRNN',
-#    'conv_tasnet': 'Conv-TasNet',
-#    'dptnet': 'DPTNet'
-#}
 
 def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'stoi', 'si_sdr'],
                  plot_name=None):
@@ -120,7 +111,6 @@ def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'stoi', 'si_sdr'],
     if plot_name is not None:
         plt.savefig(plot_name, bbox_inches='tight')
 
-    #plt.show()
 
 def highlight_max(s): 
     if s.dtype == np.object: 
@@ -147,23 +137,12 @@ def avg_results_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
     total_df = total_df.round({'SI-SDR': 3, 'PESQ': 3, 'STOI': 3})
     print(total_df)
     return total_df
-#
-#models = {
-#    'input': None,
-#    #'baseline': RegressionFCNN.from_pretrained('../../../workspace/models/baseline_model_v1.pt'),
-#    #'baseline_v2': RegressionFCNN.from_pretrained('../../../workspace/models/baseline_model_v2.pt'),
-#    #'baseline_proper_mse': RegressionFCNN.from_pretrained('../../../workspace/models/baseline_model_fixed_mse.pt'),
-#    #'waveunet_v1': WaveUNet.from_pretrained('../../../workspace/models/waveunet_model_adapt.pt'),
-#    #'dcunet_20': DCUNet.from_pretrained('../../../workspace/models/dcunet_20_random_v2.pt'),
-#    #'dccrn': DCCRNet.from_pretrained('../../../workspace/models/dccrn_random_v1.pt'),
-#    'dprnn': DPRNNTasNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/DRONE_project/asteroid/notebooks/dprnn_model.pt'),
-#    'conv_tasnet': ConvTasNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/DRONE_project/asteroid/notebooks/convtasnet_model.pt'),
-#    'dptnet': DPTNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/DRONE_project/asteroid/notebooks/dptnet_model.pt'),
-#}
-#
+
 models = {
     'input': None,
     'baseline': RegressionFCNN.from_pretrained('models/baseline_model_v1.pt'),
+    'vae': VAE.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/workspace/models/VAE.pt'),
+    'auto_encoder': VAE.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/workspace/models/AutoEncoder.pt'),
     'waveunet_v1': WaveUNet.from_pretrained('models/waveunet_model_adapt.pt'),
     'dcunet_20': DCUNet.from_pretrained('models/dcunet_20_random_v2.pt'),
     'dccrn': DCCRNet.from_pretrained('models/dccrn_random_v1.pt'),
