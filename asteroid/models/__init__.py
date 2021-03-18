@@ -14,6 +14,7 @@ from .smolnet import SMoLnet
 from .fcnn_regression import RegressionFCNN
 from .vae import VAE
 from .phasen import Phasen
+from .auto_encoder import AutoEncoder
 
 # Sharing-related
 from .publisher import save_publishable, upload_publishable
@@ -33,6 +34,7 @@ __all__ = [
     "SMoLnet",
     "RegressionFCNN",
     "VAE",
+    "AutoEncoder",
     "Phasen",
     "save_publishable",
     "upload_publishable",
