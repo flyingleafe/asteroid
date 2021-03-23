@@ -339,13 +339,24 @@ class BaseEncoderMaskerDecoder(BaseModel):
 class BaseGAN(BaseModel):
     """Base class for GANs
     """
-    def __init__(self, generator, discriminator):
-        super().__init__(sample_rate=getattr(generator, "sample_rate", None))
+    def __init__(self, generator, discriminator, sample_rate):
+        super().__init__(sample_rate=sample_rate)
         self.generator = generator
         self.discriminator = discriminator
         
     def forward(self, wav):
-        return self.generator(wav)
+        shape = jitable_shape(wav)
+        # Reshape to (batch, n_mix, time)
+        wav = unsqueeze_to_3d(wav)
+        output = self.forward_generator(wav)
+        reconstructed = pad_x_to_y(output, wav)
+        return _shape_reconstructed(reconstructed, shape)
+    
+    def forward_generator(self, *args, **kwargs):
+        return self.generator(*args, **kwargs)
+    
+    def forward_discriminator(self, *args, **kwargs):
+        return self.discriminator(*args, **kwargs)
 
 
 @script_if_tracing

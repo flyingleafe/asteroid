@@ -1,280 +1,303 @@
+import numpy as np
 import torch.nn as nn
-import torch 
+import torch as th
 import torch.nn.functional as F
 
+from typing import Optional, Union, Tuple
 from .base_models import BaseEncoderMaskerDecoder
 from asteroid_filterbanks import make_enc_dec
 from asteroid_filterbanks.transforms import mag, reim, apply_mag_mask, angle, from_magphase
 from ..masknn import norms, activations
 from einops import rearrange
 
-class FTB(nn.Module):
+EPSILON = np.finfo(np.float32).eps
 
-    def __init__(self, input_dim=257, in_channel=9, r_channel=5):
-        super(FTB, self).__init__()
-        
-        self.in_channel = in_channel
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channel, r_channel, kernel_size=[1,1]),
-            nn.BatchNorm2d(r_channel),
-            nn.ReLU()
-        )
-        
+batchnorm_non_linear = {
+    "relu": F.relu,
+    "sigmoid": th.sigmoid,
+    "": lambda inp: inp
+}
+
+
+class PhasenConv2d(nn.Conv2d):
+    """
+    Conv2d for Phasen (keeping time/frequency dimention not changed)
+    """
+
+    def __init__(self, in_channels: int, out_channels: int,
+                 kernel_size: Tuple[int, int]) -> None:
+        padding_size = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
+        super(PhasenConv2d, self).__init__(in_channels,
+                                           out_channels,
+                                           kernel_size,
+                                           stride=(1, 1),
+                                           padding=padding_size)
+
+
+class PhasenBatchNorm1d(nn.BatchNorm1d):
+    """
+    BatchNorm1d for Phasen (following a non-linear layer)
+    """
+
+    def __init__(self, num_features: int, non_linear: str = "relu") -> None:
+        super(PhasenBatchNorm1d, self).__init__(num_features)
+        self.non_linear = batchnorm_non_linear[non_linear]
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        out = super().forward(inp)
+        return self.non_linear(out)
+
+
+class PhasenBatchNorm2d(nn.BatchNorm2d):
+    """
+    BatchNorm2d for Phasen (following a non-linear layer)
+    """
+
+    def __init__(self, num_features: int, non_linear: str = "relu") -> None:
+        super(PhasenBatchNorm2d, self).__init__(num_features)
+        self.non_linear = batchnorm_non_linear[non_linear]
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        out = super().forward(inp)
+        return self.non_linear(out)
+
+
+class PhasenGlobalNorm(nn.Module):
+    """
+    Global Normalization for Phasen
+    """
+
+    def __init__(self,
+                 dim: int,
+                 eps: float = 1e-05,
+                 elementwise_affine: bool = True) -> None:
+        super(PhasenGlobalNorm, self).__init__()
+        self.eps = eps
+        self.normalized_dim = dim
+        self.elementwise_affine = elementwise_affine
+        if elementwise_affine:
+            self.beta = nn.Parameter(th.zeros(1, dim))
+            self.gamma = nn.Parameter(th.ones(1, dim))
+        else:
+            self.register_parameter("weight", None)
+            self.register_parameter("bias", None)
+
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp: N x C x F x T
+        Return:
+            out: N x C x F x T
+        """
+        if inp.dim() != 4:
+            raise RuntimeError("PhasenGlobalNorm expects 4D tensor as input")
+        # N x 1 x 1
+        mean = th.mean(inp, (1, 2, 3), keepdim=True)
+        var = th.mean((inp - mean)**2, (1, 2, 3), keepdim=True)
+        # N x T x C
+        if self.elementwise_affine:
+            out = self.gamma[..., None, None] * (inp - mean) / th.sqrt(
+                var + self.eps) + self.beta[..., None, None]
+        else:
+            out = (inp - mean) / th.sqrt(var + self.eps)
+        return out
+
+    def extra_repr(self):
+        return "{normalized_dim}, eps={eps}, " \
+            "elementwise_affine={elementwise_affine}".format(**self.__dict__)
+
+
+class FTBlock(nn.Module):
+    """
+    Frequency Transformation Block
+    """
+
+    def __init__(self,
+                 channel_amp: int,
+                 num_bins: int = 257,
+                 channel_r: int = 5,
+                 conv1d_kernel: int = 9) -> None:
+        super(FTBlock, self).__init__()
+        self.conv1x1_1 = nn.Sequential(
+            nn.Conv2d(channel_amp, channel_r, (1, 1)),
+            PhasenBatchNorm2d(channel_r, non_linear="relu"))
+        self.linear = nn.Conv1d(num_bins, num_bins, 1, bias=False)
         self.conv1d = nn.Sequential(
-            nn.Conv1d(r_channel*input_dim, in_channel, kernel_size=9,padding=4),
-            nn.BatchNorm1d(in_channel),
-            nn.ReLU()
-        )
-        self.freq_fc = nn.Linear(input_dim, input_dim, bias=False)
+            nn.Conv1d(num_bins * channel_r,
+                      channel_amp,
+                      conv1d_kernel,
+                      padding=(conv1d_kernel - 1) // 2),
+            nn.BatchNorm1d(channel_amp))
+        self.conv1x1_2 = nn.Sequential(
+            nn.Conv2d(2 * channel_amp, channel_amp, (1, 1)),
+            PhasenBatchNorm2d(channel_amp, non_linear="relu"))
 
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(in_channel*2, in_channel, kernel_size=[1,1]),
-            nn.BatchNorm2d(in_channel),
-            nn.ReLU()
-        )
+    def forward(self, inp: th.Tensor) -> th.Tensor:
+        """
+        Args:
+            inp: N x Ca x F x T
+        Return:
+            out: N x Ca x F x T
+        """
+        # N x Cr x F x T
+        out = self.conv1x1_1(inp)
+        N, _, F, T = out.shape
+        # N x Cr*F x T
+        out = out.view(N, -1, T)
+        # N x Ca x T
+        att = self.conv1d(out)
+        # N x Ca x F x T
+        out = att[..., None, :] * inp
+        # N*Ca x F x T
+        out = out.view(-1, F, T)
+        # N*Ca x F x T
+        out = self.linear(out)
+        # N x Ca x F x T
+        out = out.view(N, -1, F, T)
+        # N x 2*Ca x F x T
+        cat = th.cat([out, inp], 1)
+        # N x Ca x F x T
+        out = self.conv1x1_2(cat)
+        return out
 
-    def forward(self, inputs):
-        '''
-        inputs should be [Batch, Ca, Dim, Time]
-        '''
-        # T-F attention        
-        conv1_out = self.conv1(inputs)
-        B, C, D, T= conv1_out.size()
-        reshape1_out = torch.reshape(conv1_out,[B, C*D, T])
-        conv1d_out = self.conv1d(reshape1_out)
-        conv1d_out = torch.reshape(conv1d_out, [B, self.in_channel,1,T])
-        
-        # now is also [B,C,D,T]
-        att_out = conv1d_out*inputs
-        
-        # tranpose to [B,C,T,D]
-        att_out = torch.transpose(att_out, 2, 3)
-        freqfc_out = self.freq_fc(att_out)
-        att_out = torch.transpose(freqfc_out, 2, 3)
 
-        cat_out = torch.cat([att_out, inputs], 1)
-        outputs = self.conv2(cat_out)
-        return outputs
+class TSBlock(nn.Module):
+    """
+    Two Stream Block
+    """
 
+    def __init__(self,
+                 channel_amp: int,
+                 channel_pha: int,
+                 num_bins: int = 257,
+                 channel_r: int = 5,
+                 conv1d_kernel: int = 9) -> None:
+        super(TSBlock, self).__init__()
+        self.ftb1 = FTBlock(channel_amp,
+                            num_bins=num_bins,
+                            channel_r=channel_r,
+                            conv1d_kernel=conv1d_kernel)
+        self.ftb2 = FTBlock(channel_amp,
+                            num_bins=num_bins,
+                            channel_r=channel_r,
+                            conv1d_kernel=conv1d_kernel)
+        self.stream_a = nn.Sequential(
+            PhasenConv2d(channel_amp, channel_amp, (5, 5)),
+            PhasenBatchNorm2d(channel_amp),
+            PhasenConv2d(channel_amp, channel_amp, (1, 25)),
+            PhasenBatchNorm2d(channel_amp),
+            PhasenConv2d(channel_amp, channel_amp, (5, 5)),
+            PhasenBatchNorm2d(channel_amp))
+        self.stream_p = nn.Sequential(
+            PhasenConv2d(channel_pha, channel_pha, (5, 3)),
+            PhasenBatchNorm2d(channel_pha),
+            PhasenConv2d(channel_pha, channel_pha, (1, 25)),
+            PhasenBatchNorm2d(channel_pha))
+        self.att_a = nn.Conv2d(channel_pha, channel_amp, (1, 1))
+        self.att_p = nn.Conv2d(channel_amp, channel_pha, (1, 1))
+
+    def forward(self, amp_and_pha: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
+        """
+        Args:
+            amp (Tensor): N x Ca x F x T
+            pha (Tensor): N x Cp x F x T
+        Return:
+            The same shape as input
+        """
+        amp, pha = amp_and_pha
+        amp = self.ftb1(amp)
+        amp = self.stream_a(amp)
+        amp = self.ftb2(amp)
+
+        pha = self.stream_p(pha)
+
+        amp = th.tanh(self.att_a(pha)) * amp
+        pha = th.tanh(self.att_p(amp)) * pha
+        return (amp, pha)
     
-class InforComu(nn.Module):
-        
-        def __init__(self, src_channel, tgt_channel):
-            super(InforComu, self).__init__()
-            self.comu_conv = nn.Conv2d(src_channel, tgt_channel, kernel_size=(1,1))
-        
-        def forward(self, src, tgt):
-            outputs=tgt*torch.tanh(self.comu_conv(src))
-            return outputs
 
-
-class GLayerNorm2d(nn.Module):
-    
-    def __init__(self, in_channel, eps=1e-12):
-        super(GLayerNorm2d, self).__init__()
-        self.eps = eps 
-        self.beta = nn.Parameter(torch.ones([1, in_channel,1,1]))
-        self.gamma = nn.Parameter(torch.zeros([1, in_channel,1,1]))
-    
-    def forward(self,inputs):
-        mean = torch.mean(inputs,[1,2,3], keepdim=True)
-        var = torch.var(inputs,[1,2,3], keepdim=True)
-        outputs = (inputs - mean)/ torch.sqrt(var+self.eps)*self.beta+self.gamma
-        return outputs
-
-
-class TSB(nn.Module):
-
-    def __init__(self, input_dim=257, channel_amp=9, channel_phase=8):
-        super(TSB, self).__init__()
-        
-        self.ftb1 = FTB(input_dim=input_dim, in_channel=channel_amp)
-        self.amp_conv1 = nn.Sequential(
-            nn.Conv2d(channel_amp, channel_amp, kernel_size=(5,5), padding=(2,2)),
-            nn.BatchNorm2d(channel_amp),
-            nn.ReLU()
-        )
-        self.amp_conv2 = nn.Sequential(
-            nn.Conv2d(channel_amp, channel_amp, kernel_size=(1,25), padding=(0,12)),
-            nn.BatchNorm2d(channel_amp),
-            nn.ReLU()
-        )
-        self.amp_conv3 = nn.Sequential(
-            nn.Conv2d(channel_amp, channel_amp, kernel_size=(5,5), padding=(2,2)),
-            nn.BatchNorm2d(channel_amp),
-            nn.ReLU()
-        )
-        
-        self.ftb2 = FTB(input_dim=input_dim, in_channel=channel_amp)
-
-        self.phase_conv1 = nn.Sequential(
-            nn.Conv2d(channel_phase, channel_phase, kernel_size=(5,5), padding=(2,2)),
-            GLayerNorm2d(channel_phase),
-        )
-        self.phase_conv2 = nn.Sequential(
-            nn.Conv2d(channel_phase, channel_phase, kernel_size=(1,25), padding=(0,12)),
-            GLayerNorm2d(channel_phase),
-        )
-
-        self.p2a_comu = InforComu(channel_phase, channel_amp)
-        self.a2p_comu = InforComu(channel_amp, channel_phase)
-
-    def forward(self, amp, phase):
-        '''
-        amp should be [Batch, Ca, Dim, Time]
-        amp should be [Batch, Cr, Dim, Time]
-        
-        '''
-        
-        amp_out1 = self.ftb1(amp)
-        amp_out2 = self.amp_conv1(amp_out1)
-        amp_out3 = self.amp_conv2(amp_out2)
-        amp_out4 = self.amp_conv3(amp_out3)
-        amp_out5 = self.ftb2(amp_out4)
-        
-        phase_out1 = self.phase_conv1(phase)
-        phase_out2 = self.phase_conv2(phase_out1)
-        
-        amp_out = self.p2a_comu(phase_out2, amp_out5)
-        phase_out = self.a2p_comu(amp_out5, phase_out2)
-        
-        return amp_out, phase_out
-    
-    
 class PhasenMasker(nn.Module):
+    """
+    PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network
+    """
 
     def __init__(
         self,
-        fft_len=512,
-        num_blocks=3,
-        channel_amp=24,
-        channel_phase=12,
-        rnn_nums=300
-    ):
-        super().__init__() 
-        self.num_blocks = 3
-        self.feat_dim = fft_len // 2 + 1 
-       
- #        self.win_len = win_len
-#         self.win_inc = win_inc
-#         self.fft_len = fft_len 
-#         self.win_type = win_type 
-
-#         fix = True
-#         self.stft = ConvSTFT(self.win_len, self.win_inc, self.fft_len, self.win_type, feature_type='complex', fix=fix)
-#         self.istft = ConviSTFT(self.win_len, self.win_inc, self.fft_len, self.win_type, feature_type='complex', fix=fix)
+        channel_amp: int = 24,
+        channel_pha: int = 12,
+        num_tsbs: int = 3,
+        num_bins: int = 257,
+        channel_r: int = 5,
+        conv1d_kernel: int = 9,
+        lstm_hidden: int = 300,
+        linear_size: int = 512
+    ) -> None:
         
-        self.amp_conv1 = nn.Sequential(
-            nn.Conv2d(2, channel_amp, 
-                kernel_size=[7,1],
-                padding=(3,0)
-            ),
-            nn.BatchNorm2d(channel_amp),
-            nn.ReLU(),
-            nn.Conv2d(channel_amp, channel_amp, 
-                kernel_size=[1,7],
-                padding=(0,3)
-            ),
-            nn.BatchNorm2d(channel_amp),
-            nn.ReLU(),
+        super(PhasenMasker, self).__init__()
+        
+        self.tsb = nn.Sequential(*[
+            TSBlock(channel_amp,
+                    channel_pha,
+                    num_bins=num_bins,
+                    channel_r=channel_r,
+                    conv1d_kernel=conv1d_kernel) for _ in range(num_tsbs)
+        ])
+        self.conv_a = nn.Sequential(
+            PhasenConv2d(2, channel_amp, (7, 1)),
+            PhasenBatchNorm2d(channel_amp),
+            PhasenConv2d(channel_amp, channel_amp, (1, 7)),
+            PhasenBatchNorm2d(channel_amp))
+        self.conv_p = nn.Sequential(
+            PhasenGlobalNorm(2), PhasenConv2d(2, channel_pha, (3, 5)),
+            PhasenGlobalNorm(channel_pha),
+            PhasenConv2d(channel_pha, channel_pha, (25, 1)))
+        self.conv1x1_a = nn.Conv2d(channel_amp, 8, (1, 1))
+        self.blstm_a = nn.LSTM(num_bins * 8,
+                               lstm_hidden,
+                               num_layers=1,
+                               bidirectional=True,
+                               batch_first=True)
+        self.linear_a = nn.Sequential(
+            nn.Conv1d(lstm_hidden * 2, linear_size, 1),
+            PhasenBatchNorm1d(linear_size),
+            nn.Conv1d(linear_size, linear_size, 1),
+            PhasenBatchNorm1d(linear_size),
+            nn.Conv1d(linear_size, num_bins, 1),
+            PhasenBatchNorm1d(num_bins, non_linear="sigmoid"),
         )
-        self.phase_conv1 = nn.Sequential(
-            nn.Conv2d(2, channel_phase, 
-                kernel_size=[3,5],
-                padding=(1,2)
-            ),
-            nn.Conv2d(channel_phase, channel_phase, 
-                kernel_size=[3,25],
-                padding=(1, 12)
-            ),
-        )
+        self.conv1x1_p = nn.Conv2d(channel_pha, 2, (1, 1))
 
-        self.tsbs = nn.ModuleList()
-        for idx in range(self.num_blocks):
-            self.tsbs.append(
-                TSB(input_dim=self.feat_dim,
-                    channel_amp=channel_amp,
-                    channel_phase=channel_phase
-                )
-            )
-   
-        self.amp_conv2 = nn.Sequential(
-            nn.Conv2d(channel_amp, 8, kernel_size=[1, 1]),
-            nn.BatchNorm2d(8),
-            nn.ReLU(),
-        )
-        self.phase_conv2 = nn.Conv1d(channel_phase,2,kernel_size=[1,1])
-        
-        self.rnn = nn.LSTM(
-            self.feat_dim * 8,
-            rnn_nums,
-            bidirectional=True,
-            batch_first=True,
-        )
-        
-        self.fcs = nn.Sequential(
-            nn.Linear(rnn_nums*2,600),
-            nn.ReLU(),
-            nn.Linear(600,600),
-            nn.ReLU(),
-            nn.Linear(600,self.feat_dim),
-            nn.Sigmoid()
-        )
+    def forward(self, inp: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
+        """
+        Args:
+            mix (Tensor): N x S
+        """
+        # N x Ca x F x T
+        amp = self.conv_a(inp)
+        # N x Cp x F x T
+        pha = self.conv_p(inp)
 
-    def forward(self, cmp_spec):
-#         # [B, D*2, T]
-#         cmp_spec = self.stft(inputs)
-#         cmp_spec = torch.unsqueeze(cmp_spec, 1)
+        amp, pha = self.tsb((amp, pha))
+        # N x 8 x F x T
+        amp = self.conv1x1_a(amp)
+        # N x 2 x F x T
+        pha = self.conv1x1_p(pha)
+        # N x F x T
+        mag = th.sqrt(pha[:, 0]**2 + pha[:, 1]**2 + EPSILON)
+        pha = pha / mag[:, None]
+        # N x CaxF x T
+        N, _, _, T = amp.shape
+        amp = amp.view(N, -1, T)
+        # N x T x CaxF
+        amp = amp.transpose(1, 2)
+        # N x T x H
+        amp, _ = self.blstm_a(amp)
+        # N x H x T
+        amp = amp.transpose(1, 2)
+        # N x F x T
+        mask = self.linear_a(amp)
+        return mask, pha
 
-#         # to [B, 2, D, T]
-#         cmp_spec = torch.cat([
-#             cmp_spec[:,:,:self.feat_dim,:],
-#             cmp_spec[:,:,self.feat_dim:,:],
-#             ],
-#             1)
-
-#         # to [B, 1, D, T]
-#         amp_spec = torch.sqrt(
-#                             torch.abs(cmp_spec[:,0])**2+
-#                             torch.abs(cmp_spec[:,1])**2,
-#                         )
-#         amp_spec = torch.unsqueeze(amp_spec, 1)
-        
-        spec = self.amp_conv1(cmp_spec)
-        phase = self.phase_conv1(cmp_spec)
-#         s_spec = spec
-#         s_phase = phase
-        for idx, layer in enumerate(self.tsbs):
-#             if idx != 0:
-#                 spec += s_spec
-#                 phase += s_phase
-            spec, phase = layer(spec, phase)
-        spec = self.amp_conv2(spec)
-
-        spec = torch.transpose(spec, 1,3)
-        B, T, D, C = spec.size()
-        spec = torch.reshape(spec, [B, T, D*C])
-        spec = self.rnn(spec)[0]
-        spec = self.fcs(spec)
-        
-        spec = torch.reshape(spec, [B,T,D,1]) 
-        spec = torch.transpose(spec, 1,3)
-        
-        phase = self.phase_conv2(phase)
-        # norm to 1
-        phase = phase / (torch.sqrt(
-            torch.abs(phase[:,0])**2+
-            torch.abs(phase[:,1])**2)
-        +1e-8).unsqueeze(1)
-        
-        return spec, phase
-#         est_spec = amp_spec * spec * phase 
-#         est_spec = torch.cat([est_spec[:,0], est_spec[:,1]], 1)
-#         est_wav = self.istft(est_spec)
-#         est_wav = torch.squeeze(est_wav, 1)
-        #t = amp_spec 
-#         return est_spec, est_wav# , [t[0], spec[0], phase[0]
-    
 
 class Phasen(BaseEncoderMaskerDecoder):
     def __init__(
@@ -293,17 +316,19 @@ class Phasen(BaseEncoderMaskerDecoder):
             sample_rate=sample_rate,
         )
         
-        masker = PhasenMasker(fft_len=n_filters, **masker_kwargs)
+        self.masker_kwargs = masker_kwargs
+        
+        masker = PhasenMasker(num_bins=(n_filters // 2 + 1), **masker_kwargs)
         super().__init__(encoder, masker, decoder)
         
 
     def forward_masker(self, tf_rep):
         tf_rep = tf_rep.unsqueeze(1)
-        input_rep = torch.cat(reim(tf_rep), dim=1)
+        input_rep = th.cat(reim(tf_rep), dim=1)
         mag_mask, phase = self.masker(input_rep)
         
         # reshape back to Asteroid format
-        phase = torch.cat([phase[:,0], phase[:,1]], dim=-2)
+        phase = th.cat([phase[:,0], phase[:,1]], dim=-2)
         return mag_mask.squeeze(1), phase.squeeze(1)
     
     
@@ -311,3 +336,12 @@ class Phasen(BaseEncoderMaskerDecoder):
         orig_mag = mag(tf_rep)
         mag_mask, phase = est_masks
         return apply_mag_mask(phase, orig_mag * mag_mask)
+    
+    def get_model_args(self):
+        fb_config = self.encoder.filterbank.get_config()
+        fb_config.pop('fb_name')
+        model_args = {
+            **fb_config,
+            **self.masker_kwargs
+        }
+        return model_args

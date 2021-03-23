@@ -15,6 +15,7 @@ from .fcnn_regression import RegressionFCNN
 from .vae import VAE
 from .phasen import Phasen
 from .auto_encoder import AutoEncoder
+from .segan import SEGAN
 
 # Sharing-related
 from .publisher import save_publishable, upload_publishable
@@ -36,6 +37,7 @@ __all__ = [
     "VAE",
     "AutoEncoder",
     "Phasen",
+    "SEGAN",
     "save_publishable",
     "upload_publishable",
 ]

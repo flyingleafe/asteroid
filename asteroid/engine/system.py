@@ -197,9 +197,110 @@ class System(pl.LightningModule):
                 dic[k] = torch.Tensor(v)
         return dic
 
-    
-# class GANSystem()    
 
+class GANSystem(System):
+    
+    def __init__(
+        self,
+        model,
+        optimizers,
+        adv_loss,
+        reg_loss,
+        reg_weight,
+        train_loader,
+        val_loader=None,
+        config=None,
+    ):
+        pl.LightningModule.__init__(self)
+        self.automatic_optimization = False
+        
+        self.model = model
+        self._optimizers = optimizers
+        
+        self.adv_loss = adv_loss
+        self.reg_loss = reg_loss
+        self.reg_weight = reg_weight
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.config = {} if config is None else config
+        self.hparams = Namespace(**self.config_to_hparams(self.config))
+        
+    def forward(self, *args, **kwargs):
+        return self.model.forward_generator(*args, **kwargs)
+        
+    def configure_optimizers(self):
+        return self._optimizers
+    
+    def training_step(self, batch, batch_idx, optimizer_idx):        
+        opt_gen, opt_dis = self.optimizers()
+        
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        batch_size = mix.shape[0]
+        
+        enh = self.model.forward_generator(mix)
+        fake = torch.zeros(batch_size).type_as(mix)
+        real = torch.ones(batch_size).type_as(mix)
+        
+        # (1) D real update
+        opt_dis.zero_grad()
+        
+        d_real = self.model.forward_discriminator(mix, clean)
+        d_real_loss = self.adv_loss(d_real.view(-1), real)
+        self.manual_backward(d_real_loss)
+        
+        # (2) D fake update
+        d_fake = self.model.forward_discriminator(mix, enh.detach())
+        d_fake_loss = self.adv_loss(d_fake.view(-1), fake)
+        self.manual_backward(d_fake_loss)
+        
+        opt_dis.step()
+        d_loss = d_real_loss + d_fake_loss
+        
+        self.log("d_loss", d_loss, logger=True, prog_bar=True)
+        
+        # (3) G update
+        opt_gen.zero_grad()
+        d_fake = self.model.forward_discriminator(mix, enh)
+        g_adv_loss = self.adv_loss(d_fake.view(-1), real)
+        g_reg_loss = self.reg_weight * self.reg_loss(clean, enh)
+        g_loss = g_adv_loss + g_reg_loss
+        self.manual_backward(g_loss)
+        opt_gen.step()
+
+        self.log("g_loss", g_loss, logger=True, prog_bar=True)
+        
+        return g_loss, d_loss
+        
+    
+    def validation_step(self, batch, batch_idx):
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        batch_size = mix.shape[0]
+        fake = torch.zeros(batch_size).type_as(mix)
+        real = torch.ones(batch_size).type_as(mix)
+        enh = self.model.forward_generator(mix)
+        
+        clean_disc_vals = self.model.forward_discriminator(mix, clean)
+        enh_disc_vals = self.model.forward_discriminator(mix, enh)
+        
+        real_loss = self.adv_loss(clean_disc_vals.view(-1), real)
+        fake_loss = self.adv_loss(enh_disc_vals.view(-1), fake)
+        val_d_loss = real_loss + fake_loss
+        
+        reg_loss = self.reg_loss(clean, enh)
+        adv_loss = self.adv_loss(enh_disc_vals.view(-1), real)
+        val_g_loss = adv_loss + self.reg_weight * reg_loss
+        
+        self.log("val_g_loss", val_g_loss, on_epoch=True, prog_bar=True)
+        self.log("val_d_loss", val_d_loss, on_epoch=True, prog_bar=True)
+        self.log("val_reg_loss", reg_loss, on_epoch=True)
+        
+        return val_g_loss, val_d_loss
+        
     
 class UNetGAN(pl.LightningModule):
 
