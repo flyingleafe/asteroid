@@ -61,61 +61,57 @@ class VAE(BaseEncoderMaskerDecoder):
     # VAE encoder-latent_varitational-decoder inspired from : https://gitlab.inria.fr/smostafa/avse-vae/-/blob/master/train_VAE.py
     def __init__(
         self,
+        input_dim=258, 
+        latent_dim=32,
+        hidden_dim_encoder=[2048],
         activation="tanh",
         n_filters=256,
         kernel_size=256,
         stride=128,
-        padding=3,
-        hid_dim = 2048,
-        z_dim = 64,
         sample_rate=8000
     ):
-        self.padding = padding
-        self.n_freq = n_filters // 2 + 1 
-        prev_dim = self.n_freq * (self.padding * 2 + 1)
-        self.hid_dim = hid_dim 
-        self.z_dim = z_dim
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+        self.hidden_dim_encoder = hidden_dim_encoder 
+        self.activation = activation # activation for audio layers
+        
+        stft, istft = make_enc_dec(
+                        "stft",
+                        n_filters=n_filters,
+                        kernel_size=kernel_size,
+                        stride=stride,
+                        sample_rate=sample_rate,
+                )
+        #fake masker to comply with asteroid BaseEncoderMaskerDecoder 
+        masker = nn.Sequential(nn.Identity(1, unused_argument1=0.1, unused_argument2=False))
+        super().__init__(stft, masker, istft) 
 
-        encoder, decoder = make_enc_dec(
-            "stft",
-            n_filters=n_filters,
-            kernel_size=kernel_size,
-            stride=stride,
-            sample_rate=sample_rate,
-        )
-        #fake masker to compy with asteroid BaseEncoderMaskerDecoder 
-        masker = nn.Sequential(nn.Identity(54, unused_argument1=0.1, unused_argument2=False))
+        self.decoder_layerZ = nn.Linear(self.latent_dim, self.hidden_dim_encoder[0])
+        self.encoder_layerX = nn.Linear(self.input_dim, self.hidden_dim_encoder[0])
+        self.output_layer = nn.Linear(hidden_dim_encoder[0], self.input_dim) 
+    
+        self.latent_mean_layer = nn.Linear(self.hidden_dim_encoder[0], self.latent_dim)
+        self.latent_logvar_layer = nn.Linear(self.hidden_dim_encoder[0], self.latent_dim)
         
-        self.activation = activation
-        
-        super().__init__(encoder, masker, decoder) 
-        #real masker 
-        self.enc1 = nn.Linear(prev_dim, self.hid_dim) 
-        self.enc2 = nn.Linear(hid_dim, self.hid_dim) 
-        self.enc3 = nn.Linear(hid_dim, self.n_freq) 
-        self.enc_mu_logvar = nn.Linear(self.n_freq, self.z_dim)
-        self.dec1 = nn.Linear(self.z_dim, self.hid_dim)
-        self.dec2 = nn.Linear(self.hid_dim, self.n_freq)
-        
-        self.register_buffer('scaler_mean', torch.zeros(self.n_freq))
-        self.register_buffer('scaler_std', torch.zeros(self.n_freq))
+        self.register_buffer('scaler_mean', torch.zeros(self.input_dim))
+        self.register_buffer('scaler_std', torch.zeros(self.input_dim))
         self.has_scaler = False
         
     def compute_scaler(self, data_iter):
         count = 0
-        total_sum = torch.zeros(self.n_freq)
-        total_sum_2 = torch.zeros(self.n_freq)
+        total_sum = torch.zeros(self.input_dim)
+        total_sum_2 = torch.zeros(self.input_dim)
         
         for batch in tqdm(data_iter, 'Computing scaler'):
             mix, _ = batch
             mix = _unsqueeze_to_3d(mix)
             tf_rep = self.forward_encoder(mix)
-            log_mag = torch.log(mag(tf_rep))
+            tf_rep = torch.abs(tf_rep)**2
             
-            total_sum   += torch.sum(log_mag, dim=(0, 2))
-            total_sum_2 += torch.sum(log_mag.pow(2), dim=(0, 2))
-            count       += log_mag.shape[0] * log_mag.shape[2]
-        
+            total_sum   += torch.sum(tf_rep, dim=(0, 2))
+            total_sum_2 += torch.sum(tf_rep.pow(2), dim=(0, 2))
+            count       +=tf_rep.shape[0] *tf_rep.shape[2]
+
         mean = total_sum / count
         variance = (total_sum_2 / count - mean.pow(2)) * (count / (count - 1))
         std = torch.sqrt(variance)
@@ -123,38 +119,42 @@ class VAE(BaseEncoderMaskerDecoder):
         self.scaler_mean = mean
         self.scaler_std = std
         self.has_scaler = True
-
-       
+    
+    def encode(self, tfrep):
+        enc_out = self.encoder_layerX(tfrep)
+        enc_out = torch.tanh(enc_out)
+        return self.latent_mean_layer(enc_out), self.latent_logvar_layer(enc_out)
+        
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
-        eps = torch.randn_like(std)
+        eps = torch.randn_like(std) #eps is normally distributed
         return eps.mul(std).add_(mu)
-        
+
+    def decode(self, z):
+        out = self.decoder_layerZ(z)
+        out =torch.tanh(out)
+        return torch.exp(self.output_layer(out))
+    
+        return istft(pred_rep)
+            
     def forward_masker(self, tf_rep):
-        batch_size = tf_rep.shape[0]
-        log_mag = torch.log(mag(tf_rep)).unsqueeze(1)
-                
+
+        # power spec
+        tf_rep = torch.abs(tf_rep)**2
+
         if self.has_scaler:
-            l = log_mag.shape[-1]
+            l = tf_rep.shape[-1]
             mean = self.scaler_mean.view(-1, 1).expand(-1, l)
             std = self.scaler_std.view(-1, 1).expand(-1, l)
-            log_mag -= mean
-            log_mag /= std
+            tf_rep -= mean
+            tf_rep /= std
         
-        padded = F.pad(log_mag, (self.padding, self.padding, 0, 0), mode='replicate')
-        stacks = F.unfold(padded, (self.n_freq, self.padding * 2 + 1)) 
-        new_batch = rearrange(stacks, 'n k l -> (n l) k')
-        
-        enc_out1 = torch.tanh(self.enc1(new_batch))
-        enc_out2 = torch.tanh(self.enc2(enc_out1))
-        enc_out3 = torch.tanh(self.enc3(enc_out2))
-        mu, logvar = self.enc_mu_logvar(enc_out3), self.enc_mu_logvar(enc_out3)
+        tf_rep = tf_rep.permute(0, 2, 1)
+        mu, logvar = self.encode(tf_rep) 
         z = self.reparameterize(mu, logvar)
-        dec_1 = self.dec1(z)
-        unrolled_masks = self.dec2(dec_1)
 
-        masks = rearrange(unrolled_masks, '(n l) k -> n k l', n=batch_size)
-        return masks, mu, logvar 
+        pred_rep = self.decode(z)
+        return pred_rep, mu, logvar 
     
     def apply_masks(self, tf_rep, est_masks):
         return apply_mag_mask(tf_rep, est_masks)
@@ -171,14 +171,13 @@ class VAE(BaseEncoderMaskerDecoder):
         shape = _jitable_shape(wav)
         # Reshape to (batch, n_mix, time)
         wav = _unsqueeze_to_3d(wav)
+        #import pdb; pdb.set_trace()
 
         # Real forward
         tf_rep = self.forward_encoder(wav)
-        est_masks, mu, logvar = self.forward_masker(tf_rep)
-        masked_tf_rep = self.apply_masks(tf_rep, est_masks)
-        decoded = self.forward_decoder(masked_tf_rep)
-
-        reconstructed = _pad_x_to_y(decoded, wav)
+        pred_rep, mu, logvar = self.forward_masker(tf_rep)
+        pred_wav = self.forward_decoder(pred_rep.permute(0, 2, 1))
+        reconstructed = _pad_x_to_y(pred_wav, wav)
         return _shape_reconstructed(reconstructed, shape)
 
     def get_model_args(self):
