@@ -13,9 +13,107 @@ from queue import Empty
 from tqdm import trange, tqdm
 from pypesq import pesq
 from pystoi import stoi
+from asteroid.data import TimitDataset
+from torch.utils.data import DataLoader, random_split, Subset
+from asteroid.data.utils import CachedWavSet, FixedMixtureSet
 
 from asteroid.models import BaseModel
 from asteroid.metrics import get_metrics
+from  asteroid.masknn import MCEM_algo, VAE_Decoder_Eval
+import torch.nn as nn
+
+def _jitable_shape(tensor):
+    """Gets shape of ``tensor`` as ``torch.Tensor`` type for jit compiler
+    .. note::
+        Returning ``tensor.shape`` of ``tensor.size()`` directly is not torchscript
+        compatible as return type would not be supported.
+    Args:
+        tensor (torch.Tensor): Tensor
+    Returns:
+        torch.Tensor: Shape of ``tensor``
+    """
+    return torch.tensor(tensor.shape)
+
+def _pad_x_to_y(x: torch.Tensor, y: torch.Tensor, axis: int = -1) -> torch.Tensor:
+    """Right-pad or right-trim first argument to have same size as second argument
+    Args:
+        x (torch.Tensor): Tensor to be padded.
+        y (torch.Tensor): Tensor to pad `x` to.
+        axis (int): Axis to pad on.
+    Returns:
+        torch.Tensor, `x` padded to match `y`'s shape.
+    """
+    if axis != -1:
+        raise NotImplementedError
+    inp_len = y.shape[axis]
+    output_len = x.shape[axis]
+    return nn.functional.pad(x, [0, inp_len - output_len])
+
+def _shape_reconstructed(reconstructed, size):
+    """Reshape `reconstructed` to have same size as `size`
+    Args:
+        reconstructed (torch.Tensor): Reconstructed waveform
+        size (torch.Tensor): Size of desired waveform
+    Returns:
+        torch.Tensor: Reshaped waveform
+    """
+    if len(size) == 1:
+        return reconstructed.squeeze(0)
+    return reconstructed
+
+#%% MCEM algorithm parameters
+niter_MCEM = 10 # number of iterations for the MCEM algorithm - CHNAGE THIS TO 100
+niter_MH = 40 # total number of samples for the Metropolis-Hastings algorithm
+burnin = 30 # number of initial samples to be discarded
+var_MH = 0.01 # variance of the proposal distribution
+tol = 1e-5 # tolerance for stopping the MCEM iterations
+
+def evaluate_vae(vae_model, decoder, mix):
+    shape = _jitable_shape(mix)
+    X = vae_model.encoder(mix.cuda()).cpu().numpy()
+    X = X[0]
+
+    F, N = X.shape
+    g0 = np.ones((1,N))
+    g_tensor0 = torch.from_numpy(g0.astype(np.float32))
+
+
+    #Intermediate representaion
+    _, z, _ = vae_model.forward_masker(torch.Tensor(X[None]).cuda())
+    z = z[0].cuda().T
+
+    Z_init = z.cpu().numpy()
+
+    eps = np.finfo(float).eps
+    K_b = 10 # NMF rank for noise model
+    W0 = np.maximum(np.random.rand(F,K_b), eps)
+    H0 = np.maximum(np.random.rand(K_b,N), eps)
+    V_b0 = W0@H0
+    V_b_tensor0 = torch.from_numpy(V_b0.astype(np.float32))
+    # All-ones initialization of the gain parameters
+    g0 = np.ones((1,N))
+    g_tensor0 = torch.from_numpy(g0.astype(np.float32))
+
+
+    mcem_algo = MCEM_algo(X=X, W=W0, H=H0, Z=Z_init, decoder=decoder,
+              niter_MCEM=niter_MCEM, niter_MH=niter_MH, burnin=burnin,
+              var_MH=var_MH)
+
+    wlen_sec=64e-3
+    fs=8000
+    wlen = int(wlen_sec*fs) # window length of 64 ms
+
+    hop = np.int(wlen//2) # hop size
+    win = np.sin(np.arange(.5,wlen-.5+1)/wlen*np.pi); # sine analysis window
+
+    cost, niter_final = mcem_algo.run(hop=hop, wlen=wlen, win=win)
+    # Separate the sources from the estimated parameters
+    mcem_algo.separate(niter_MH=100, burnin=75)
+    estimate = vae_model.forward_decoder(torch.Tensor(mcem_algo.S_hat).cuda())
+    estimate= _pad_x_to_y(estimate, mix)
+    estimate = _shape_reconstructed(estimate, shape)
+    return estimate 
+    
 
 def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False):
     mix, clean, estimate, snr = batch
@@ -57,11 +155,15 @@ def data_feed_process(queue, signal_queue, model, test_set):
     def model_run(mix):
         if model is None:
             return mix
+        if model.__class__.__name__ == 'VAE':
+            decoder = VAE_Decoder_Eval(model)
+            return evaluate_vae(model, decoder, mix).detach().cpu()
         else:
             return model(mix.cuda()).squeeze(1).detach().cpu()
         
     with torch.no_grad():
         for ix, (mix, clean, snr) in enumerate(loader):
+            print('MODEL NAME: ', model.__class__.__name__)
             enh = model_run(mix)
             queue.put((ix, (mix, clean, enh, snr)))
 
@@ -86,7 +188,7 @@ def eval_process(proc_idx, input_queue, output_queue, **kwargs):
             time.sleep(0.1)
             
 
-def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'stoi', 'si_sdr'],
+def evaluate_model(model, test_set, num_workers=2, metrics=['pesq', 'stoi', 'si_sdr'],
                    sample_rate=8000, max_queue_size=100, use_pypesq=False, use_file_sharing=True):
     
     if use_file_sharing:
@@ -102,6 +204,7 @@ def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'stoi', '
     signal_queue = Queue()
     input_queue = Queue(maxsize=max_queue_size)
     output_queue = Queue(maxsize=max_queue_size)
+
     
     try:
         feed_pr = Process(target=data_feed_process, args=(input_queue, signal_queue, model, test_set))
@@ -174,6 +277,8 @@ model_labels = {
     'unetgan-nogan': 'UNetGAN generator (MSE loss only)',
     'phasen': 'PHASEN',
 }
+
+
 
 def aggregate_results(dfs, metrics=['pesq', 'stoi', 'si_sdr']):
     return {
@@ -313,7 +418,6 @@ def eval_all_and_plot(models, test_set, directory, plot_name=None, figsize=(14,8
 @hydra.main(config_path='conf', config_name='config')
 def main(args):
     pass
-
-
+    
 if __name__ == "__main__":
     main()
