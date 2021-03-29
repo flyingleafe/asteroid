@@ -29,7 +29,7 @@ class RegressionFCNN(BaseEncoderMaskerDecoder):
         n_filters=256,
         kernel_size=256,
         stride=128,
-        use_sigmoid=True,
+        use_sigmoid=False,
         sample_rate=8000
     ):
         encoder, decoder = make_enc_dec(

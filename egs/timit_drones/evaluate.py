@@ -188,8 +188,8 @@ def eval_process(proc_idx, input_queue, output_queue, **kwargs):
             time.sleep(0.1)
             
 
-def evaluate_model(model, test_set, num_workers=2, metrics=['pesq', 'stoi', 'si_sdr'],
-                   sample_rate=8000, max_queue_size=100, use_pypesq=False, use_file_sharing=True):
+def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'estoi', 'si_sdr'],
+                   sample_rate=8000, max_queue_size=100, use_pypesq=False, use_file_sharing=True, **kwargs):
     
     if use_file_sharing:
         torch.multiprocessing.set_sharing_strategy('file_system')
@@ -260,11 +260,12 @@ model_labels = {
     'baseline_proper_mse': 'Baseline DNN (fixed test set)',
     'baseline_sigmoid': 'Baseline DNN (sigm)',
     'baseline_sigmoid_1024': 'Baseline DNN v2 (sigm)',
+    'vae': 'VAE',
     'waveunet_v1': 'Wave-U-Net',
     'dcunet_20': 'DCUNet-20',
     'dccrn': 'DCCRN',
     'dccrn_1024': 'DCCRN v2',
-    'smolnet': 'SMoLnet',
+    'smolnet': 'SMoLnet-TCS',
     'smolnet_tms': 'SMoLnet-TMS',
     'smolnet_cirm': 'SMoLnet-cIRM',
     'smolnet_1024': 'SMoLnet v2',
@@ -273,14 +274,46 @@ model_labels = {
     'dptnet': 'DPTNet',
     'demucs': 'Demucs',
     'demucs_full': 'Demucs (full)',
+    'segan': 'SEGAN',
+    'segan-nogan': 'SEGAN (L1 loss only)',
     'unetgan': 'UNetGAN',
-    'unetgan-nogan': 'UNetGAN generator (MSE loss only)',
+    'unetgan-nogan': 'UNetGAN (MSE loss only)',
     'phasen': 'PHASEN',
+    'phasen_1024': 'PHASEN v2',
 }
 
 
+main_models = ['baseline', 'vae', 'smolnet', 'smolnet_tms', 'smolnet_cirm',
+               'dcunet_20', 'dccrn', 'phasen', 'waveunet_v1', 'demucs',
+               'conv_tasnet', 'dprnn', 'dptnet', 'segan', 'unetgan']
 
-def aggregate_results(dfs, metrics=['pesq', 'stoi', 'si_sdr']):
+kelly_colors = dict(
+    vivid_yellow=(255, 179, 0),
+    strong_purple=(128, 62, 117),
+    vivid_orange=(255, 104, 0),
+    very_light_blue=(166, 189, 215),
+    vivid_red=(193, 0, 32),
+    grayish_yellow=(206, 162, 98),
+    #medium_gray=(129, 112, 102),
+
+    # these aren't good for people with defective color vision:
+    vivid_green=(0, 125, 52),
+    strong_purplish_pink=(246, 118, 142),
+    strong_blue=(0, 83, 138),
+    strong_yellowish_pink=(255, 122, 92),
+    strong_violet=(83, 55, 122),
+    vivid_orange_yellow=(255, 142, 0),
+    strong_purplish_red=(179, 40, 81),
+    vivid_greenish_yellow=(244, 200, 0),
+    strong_reddish_brown=(127, 24, 13),
+    vivid_yellowish_green=(147, 170, 0),
+    deep_yellowish_brown=(89, 51, 21),
+    vivid_reddish_orange=(241, 58, 19),
+    dark_olive_green=(35, 44, 22))
+
+model_colors = {m: (r/255, g/255, b/255) for m, (r, g, b) in zip(main_models, kelly_colors.values())}
+
+def aggregate_results(dfs, metrics=['pesq', 'estoi', 'si_sdr']):
     return {
         name: df.groupby('snr').agg({
             metric: ['mean', 'std', 'count'] for metric in metrics
@@ -289,8 +322,9 @@ def aggregate_results(dfs, metrics=['pesq', 'stoi', 'si_sdr']):
     }
     
 
-def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'stoi', 'si_sdr'],
-                 plot_name=None, legend='right', labels=None, lines={}, **kwargs): 
+def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'estoi', 'si_sdr'],
+                 plot_name=None, legend='right', legend_ncol=3, legend_pad=0.08, legend_pad_left=0.0,
+                 ax_bgcol=None, labels=None, lines={}, **kwargs): 
     
     fig, axes = plt.subplots(nrows=1, ncols=len(metrics), figsize=figsize)
     all_scores = aggregate_results(dfs, metrics)
@@ -301,6 +335,10 @@ def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'stoi', 'si_sdr'],
     for model_name, scores in all_scores.items():
         line_kwargs = lines.get(model_name, {'marker': '.', 'alpha': 0.8})
         fill_kwargs = {}
+        if model_name in model_colors:
+            line_kwargs['color'] = model_colors[model_name]
+            fill_kwargs['color'] = model_colors[model_name]
+            
         if model_name == 'input':
             line_kwargs = {'c': 'black', 'ls': 'dotted'}
             fill_kwargs = {'color': 'black'}
@@ -314,15 +352,28 @@ def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'stoi', 'si_sdr'],
             plt.fill_between(xs, means - stds, means + stds, alpha=0.2, **fill_kwargs)
     
     for i, metric in enumerate(metrics):
+        if ax_bgcol is not None:
+            axes[i].set_facecolor(ax_bgcol)
+        
         plt.sca(axes[i])
         plt.grid(which='both')
         plt.title(metrics_names[metric])
         plt.xlabel('SNR, dB')
-        if legend == 'right' and i == len(metrics) - 1:
-            plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-        elif legend == 'top' and i == 0:
-            plt.legend(bbox_to_anchor=(0, 1.05, 1, 0), loc="lower left", ncol=3)
-    
+        
+    fig.tight_layout()
+        
+    legend_kwargs = {}
+    if ax_bgcol is not None:
+        legend_kwargs['facecolor'] = ax_bgcol
+        
+    if legend == 'right':
+        plt.sca(axes[len(metrics) - 1])
+        plt.legend(bbox_to_anchor=(1,1), loc="upper left", **legend_kwargs)
+    elif legend == 'top':
+        plt.sca(axes[0])
+        plt.legend(bbox_to_anchor=(legend_pad_left, 1 + legend_pad, 1, 0), loc="lower left",
+                   ncol=legend_ncol, **legend_kwargs)
+                    
     if plot_name is not None:
         plt.savefig(plot_name, bbox_inches='tight')
     
@@ -337,7 +388,7 @@ def highlight_max(s):
     return ['font-weight: bold' if cell else '' for cell in is_max] 
 
 
-def avg_results_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
+def avg_results_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
     total_df = pd.DataFrame(columns=['Model', 'N. of params'] + [metrics_names[m] for m in metrics])
     for model_name, df in dfs.items():
         model = models[model_name]
@@ -352,7 +403,7 @@ def avg_results_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
     total_df = total_df.style.apply(highlight_max)
     return total_df
 
-def avg_improvements_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
+def avg_improvements_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
     total_df = pd.DataFrame(columns=['Model', 'N. of params'] + [metrics_names[m] for m in metrics])
     
     input_avgs = dfs['input'][metrics].mean(axis=0)
@@ -361,7 +412,12 @@ def avg_improvements_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
         if model is None:
             continue
         
-        param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        if hasattr(model, 'generator'):
+            params = model.generator.parameters()
+        else:
+            params = model.parameters()
+            
+        param_count = sum(p.numel() for p in params if p.requires_grad)
         param_approx = np.around(param_count / 1000000, decimals=2)
         
         avgs = df[metrics].mean(axis=0)
@@ -373,7 +429,7 @@ def avg_improvements_table(dfs, models, metrics=['pesq', 'stoi', 'si_sdr']):
     return total_df
 
 
-def eval_all(models, test_set, directory, metrics=['pesq', 'stoi', 'si_sdr'], subset_ixs=None, **kwargs):
+def eval_all(models, test_set, directory, metrics=['pesq', 'estoi', 'si_sdr'], subset_ixs=None, **kwargs):
     results_dfs = {}
     os.makedirs(directory, exist_ok=True)
     
@@ -397,7 +453,7 @@ def eval_all(models, test_set, directory, metrics=['pesq', 'stoi', 'si_sdr'], su
         else:
             df = evaluate_model(model, test_set, metrics=metrics, **kwargs)
             if existing_df is not None:
-                df = df.merge(existing_df, how='outer')
+                df = pd.concat([existing_df, df[metrics]], axis=1)
                 
             df.to_csv(csv_path, index=False)
 
@@ -408,11 +464,36 @@ def eval_all(models, test_set, directory, metrics=['pesq', 'stoi', 'si_sdr'], su
         
     return results_dfs
 
+
 def eval_all_and_plot(models, test_set, directory, plot_name=None, figsize=(14,8),
-                      metrics=['pesq', 'stoi', 'si_sdr'], **kwargs):
+                      metrics=['pesq', 'estoi', 'si_sdr'], **kwargs):
     results_dfs = eval_all(models, test_set, directory, metrics=metrics, **kwargs)
     plot_results(results_dfs, metrics=metrics, figsize=figsize, plot_name=plot_name, **kwargs)
-    return avg_improvements_table(results_dfs, models)
+    return avg_improvements_table(results_dfs, models, metrics=metrics)
+
+
+def time_evaluate_cpu_all(models, number=1, stft_only=False):
+    orig_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    with torch.no_grad():
+        inp = torch.rand(8192)
+        times = {}
+        for name, model in models.items():
+            if model is None:
+                continue
+            
+            print(f'Running {name}')
+            model.eval()
+            if not stft_only:
+                times[name] = timeit.timeit('_ = model(inp)', number=number, globals=locals()) / number
+            else:
+                times[name] = timeit.timeit('_ = model.decoder(model.encoder(inp))',
+                                            number=number, globals=locals()) / number
+
+    torch.set_num_threads(orig_threads)
+    return times
+
+# def time_eval_cpu()
 
 
 @hydra.main(config_path='conf', config_name='config')

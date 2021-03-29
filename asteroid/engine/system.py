@@ -99,6 +99,8 @@ class System(pl.LightningModule):
             Otherwise, ``training_step`` and ``validation_step`` can be overwriten.
         """
         inputs, targets = batch
+        inputs = unsqueeze_to_3d(inputs)
+        targets = unsqueeze_to_3d(targets)
         est_targets = self(inputs)
         loss = self.loss_func(est_targets, targets)
         return loss

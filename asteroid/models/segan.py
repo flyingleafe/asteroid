@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch 
 import torch.nn.functional as F
 
+from functools import partial
+from asteroid.masknn.wavenet import apply_model_chunked
 from .base_models import BaseGAN
 
 def build_norm_layer(norm_type, param=None, num_feats=None):
@@ -137,7 +139,7 @@ class GSkip(nn.Module):
         if self.skip_type == 'conv':
             sk_h = self.skip_k(hj)
         else:
-            skip_k = self.skip_k.repeat(hj.size(0), 1, hj.size(2))
+            skip_k = self.skip_k.repeat(hj.size(0), 1, hj.size(2)).type_as(hj)
             sk_h =  skip_k * hj
         if hasattr(self, 'skip_dropout'):
             sk_h = self.skip_dropout(sk_h)
@@ -191,8 +193,8 @@ class Generator(nn.Module):
                               kwidth=skip_kwidth,
                               bias=bias)
                 l_i = pi - 1
-                skips[l_i] = {'alpha':gskip}
-                setattr(self, 'alpha_{}'.format(l_i), skips[l_i]['alpha'])
+                skips[l_i] = gskip
+                setattr(self, 'alpha_{}'.format(l_i), skips[l_i])
             enc_block = GConv1DBlock(
                 ninp, fmap, kw, stride=pool, bias=bias,
                 norm_type=norm_type
@@ -256,6 +258,8 @@ class Generator(nn.Module):
         hall = {}
         hi = x
         skips = self.skips
+        
+        skip_tensors = {}
         for l_i, enc_layer in enumerate(self.enc_blocks):
             hi, linear_hi = enc_layer(hi, True)
             #print('ENC {} hi size: {}'.format(l_i, hi.size()))
@@ -263,7 +267,7 @@ class Generator(nn.Module):
                     #                                            hi.size(),
                     #                                            hi.size(1)))
             if self.skip and l_i < (len(self.enc_blocks) - 1):
-                skips[l_i]['tensor'] = linear_hi
+                skip_tensors[l_i] = linear_hi
             if ret_hid:
                 hall['enc_{}'.format(l_i)] = hi
         if not self.no_z:
@@ -285,11 +289,12 @@ class Generator(nn.Module):
             if self.skip and enc_layer_idx in self.skips and \
             self.dec_poolings[l_i] > 1:
                 skip_conn = skips[enc_layer_idx]
+                skip_tensor = skip_tensors[enc_layer_idx]
                 #hi = self.skip_merge(skip_conn, hi)
                 #print('Merging  hi {} with skip {} of hj {}'.format(hi.size(),
                 #                                                    l_i,
                 #                                                    skip_conn['tensor'].size()))
-                hi = skip_conn['alpha'](skip_conn['tensor'], hi)
+                hi = skip_conn(skip_tensor, hi)
             #print('DEC in size after skip and z_all: ', hi.size())
             #print('decoding layer {} with input {}'.format(l_i, hi.size()))
             hi = dec_layer(hi)
@@ -424,7 +429,7 @@ class Discriminator(nn.Module):
     
     
 class SEGAN(BaseGAN):
-    def __init__(self, sample_rate=8000):
+    def __init__(self, sample_rate=8000, no_z=False):
         # original SEGAN parameters
         fmaps = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
         poolings = [2]*len(fmaps)
@@ -436,6 +441,7 @@ class SEGAN(BaseGAN):
             poolings=poolings,
             skip_merge='concat',
             skip_type='constant',
+            no_z = no_z,
             bias=True)
         
         disc = Discriminator(2,
@@ -446,9 +452,18 @@ class SEGAN(BaseGAN):
             pool_slen=8)
         
         super().__init__(gen, disc, sample_rate=sample_rate)
-        
+            
     def forward_discriminator(self, mix, clean_or_enh):
         return self.discriminator(torch.cat((mix, clean_or_enh), dim=1))
     
     def forward_generator(self, wav, z=None):
-        return self.generator(wav, z=z)
+        if wav.shape[-1] == 16384:
+            return self.generator(wav, z=z)
+        else:
+            return apply_model_chunked(partial(self.generator, z=z), wav, 16384)
+    
+    def get_model_args(self):
+        return {
+            'sample_rate': self.sample_rate,
+            'no_z': self.generator.no_z,
+        }
