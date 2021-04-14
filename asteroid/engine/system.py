@@ -241,9 +241,15 @@ class GANSystem(System):
         clean = unsqueeze_to_3d(clean)
         batch_size = mix.shape[0]
         
+        # duck-typing BaseEncoderMaskerDecoder GANs
+        is_encoder_decoder = hasattr(self.model, 'forward_encoder') and hasattr(self.model, 'forward_decoder')
+        if is_encoder_decoder:
+            mix = self.model.forward_encoder(mix)
+            clean = self.model.forward_encoder(clean)
+            
         enh = self.model.forward_generator(mix)
-        fake = torch.zeros(batch_size).type_as(mix)
-        real = torch.ones(batch_size).type_as(mix)
+        fake = self.model.fake_targets(mix, clean, enh).type_as(mix)
+        real = self.model.real_targets(mix, clean, enh).type_as(mix)
         
         # (1) D real update
         opt_dis.zero_grad()
@@ -275,16 +281,22 @@ class GANSystem(System):
         
         return g_loss, d_loss
         
-    
+
     def validation_step(self, batch, batch_idx):
         mix, clean = batch
         mix = unsqueeze_to_3d(mix)
         clean = unsqueeze_to_3d(clean)
         
         batch_size = mix.shape[0]
-        fake = torch.zeros(batch_size).type_as(mix)
-        real = torch.ones(batch_size).type_as(mix)
+        # duck-typing BaseEncoderMaskerDecoder GANs
+        is_encoder_decoder = hasattr(self.model, 'forward_encoder') and hasattr(self.model, 'forward_decoder')
+        if is_encoder_decoder:
+            mix = self.model.forward_encoder(mix)
+            clean = self.model.forward_encoder(clean)
+            
         enh = self.model.forward_generator(mix)
+        fake = self.model.fake_targets(mix, clean, enh).type_as(mix)
+        real = self.model.real_targets(mix, clean, enh).type_as(mix)
         
         clean_disc_vals = self.model.forward_discriminator(mix, clean)
         enh_disc_vals = self.model.forward_discriminator(mix, enh)

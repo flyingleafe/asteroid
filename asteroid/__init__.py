@@ -1,7 +1,7 @@
 import pathlib
 
 from .models import ConvTasNet, DCCRNet, DCUNet, DPRNNTasNet, DPTNet, LSTMTasNet, DeMask
-from .models import VAE, AutoEncoder, WaveUNet, Demucs, SMoLnet, RegressionFCNN, Phasen, SEGAN
+from .models import VAE, AutoEncoder, WaveUNet, Demucs, SMoLnet, RegressionFCNN, Phasen, SEGAN, MetricGAN
 from .utils import deprecation_utils, torch_utils  # noqa
 
 project_root = str(pathlib.Path(__file__).expanduser().absolute().parent.parent)
@@ -36,5 +36,6 @@ __all__ = [
     "AutoEncoder",
     "Phasen",
     "SEGAN",
+    "MetricGAN",
     "show_available_models",
 ]

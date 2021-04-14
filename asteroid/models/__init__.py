@@ -16,6 +16,7 @@ from .vae import VAE
 from .phasen import Phasen
 from .auto_encoder import AutoEncoder
 from .segan import SEGAN
+from .metric_gan import MetricGAN
 
 # Sharing-related
 from .publisher import save_publishable, upload_publishable
@@ -38,6 +39,7 @@ __all__ = [
     "AutoEncoder",
     "Phasen",
     "SEGAN",
+    "MetricGAN",
     "save_publishable",
     "upload_publishable",
 ]

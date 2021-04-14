@@ -1,0 +1,9 @@
+model:
+    _target_: asteroid.SMoLnet
+    max_dilation: 4
+    
+model_version: "dil4"
+loss: "mse"
+lr: 1e-4
+crop_length: 10240
+#batch_size: 128

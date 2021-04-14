@@ -1,0 +1,10 @@
+model:
+    _target_: asteroid.SMoLnet
+    n_filters: 512
+    kernel_size: 512
+    stride: 256
+
+model_version: 'stft512'
+loss: "mse"
+lr: 1e-4
+crop_length: 10240

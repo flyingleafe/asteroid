@@ -357,7 +357,12 @@ class BaseGAN(BaseModel):
     
     def forward_discriminator(self, *args, **kwargs):
         return self.discriminator(*args, **kwargs)
+    
+    def real_targets(self, mix, clean, enh):
+        return torch.ones(mix.shape[0]).type_as(mix)
 
+    def fake_targets(self, mix, clean, enh):
+        return torch.zeros(mix.shape[0]).type_as(mix)
 
 @script_if_tracing
 def _shape_reconstructed(reconstructed, size):

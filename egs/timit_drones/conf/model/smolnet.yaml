@@ -1,7 +1,8 @@
 model:
     _target_: asteroid.SMoLnet
     
+#model_version: "TCS"
 loss: "mse"
 lr: 1e-4
 crop_length: 10240
-batch_size: 128
+#batch_size: 128

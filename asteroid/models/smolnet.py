@@ -43,11 +43,13 @@ class SMoLnet(BaseEncoderMaskerDecoder):
         self,
         target="TCS",
         inner_channels=64,
+        dilated_layers=10,
+        total_layers=13,
+        max_dilation=None,
         n_filters=2048,
         kernel_size=2048,
         stride=1024,
-        sample_rate=8000,
-        total_layers=13
+        sample_rate=8000
     ):
         encoder, decoder = make_enc_dec(
             "stft",
@@ -60,18 +62,24 @@ class SMoLnet(BaseEncoderMaskerDecoder):
         assert target in ("TMS", "TCS", "cIRM")
         self.target = target
         self.inner_channels = inner_channels
+        self.dilated_layers = dilated_layers
+        self.total_layers = total_layers
+        self.max_dilation = max_dilation
         
         input_channels = 2 if self.target in ("cIRM", "TCS") else 1
         
         layers = []
         prev_ch = input_channels
         
-        num_dilated_layers = int(np.log2(n_filters / 2))
-        num_square_layers = total_layers - num_dilated_layers
+        num_square_layers = self.total_layers - self.dilated_layers
         assert num_square_layers > 0
         
-        for idx in range(num_dilated_layers):
-            layers.append(SMoLnetDilatedLayer(prev_ch, self.inner_channels, dilation=2**idx))
+        for idx in range(self.dilated_layers):
+            dilation = 2**idx
+            if self.max_dilation is not None:
+                dilation = min(dilation, self.max_dilation)
+                
+            layers.append(SMoLnetDilatedLayer(prev_ch, self.inner_channels, dilation=dilation))
             prev_ch = self.inner_channels
 
         for idx in range(num_square_layers):
@@ -118,5 +126,8 @@ class SMoLnet(BaseEncoderMaskerDecoder):
             **fb_config,
             'target': self.target,
             'inner_channels': self.inner_channels,
+            'dilated_layers': self.dilated_layers,
+            'total_layers': self.total_layers,
+            'max_dilation': self.max_dilation,
         }
         return model_args

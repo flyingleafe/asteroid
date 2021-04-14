@@ -13,107 +13,9 @@ from queue import Empty
 from tqdm import trange, tqdm
 from pypesq import pesq
 from pystoi import stoi
-from asteroid.data import TimitDataset
-from torch.utils.data import DataLoader, random_split, Subset
-from asteroid.data.utils import CachedWavSet, FixedMixtureSet
 
 from asteroid.models import BaseModel
 from asteroid.metrics import get_metrics
-from  asteroid.masknn import MCEM_algo, VAE_Decoder_Eval
-import torch.nn as nn
-
-def _jitable_shape(tensor):
-    """Gets shape of ``tensor`` as ``torch.Tensor`` type for jit compiler
-    .. note::
-        Returning ``tensor.shape`` of ``tensor.size()`` directly is not torchscript
-        compatible as return type would not be supported.
-    Args:
-        tensor (torch.Tensor): Tensor
-    Returns:
-        torch.Tensor: Shape of ``tensor``
-    """
-    return torch.tensor(tensor.shape)
-
-def _pad_x_to_y(x: torch.Tensor, y: torch.Tensor, axis: int = -1) -> torch.Tensor:
-    """Right-pad or right-trim first argument to have same size as second argument
-    Args:
-        x (torch.Tensor): Tensor to be padded.
-        y (torch.Tensor): Tensor to pad `x` to.
-        axis (int): Axis to pad on.
-    Returns:
-        torch.Tensor, `x` padded to match `y`'s shape.
-    """
-    if axis != -1:
-        raise NotImplementedError
-    inp_len = y.shape[axis]
-    output_len = x.shape[axis]
-    return nn.functional.pad(x, [0, inp_len - output_len])
-
-def _shape_reconstructed(reconstructed, size):
-    """Reshape `reconstructed` to have same size as `size`
-    Args:
-        reconstructed (torch.Tensor): Reconstructed waveform
-        size (torch.Tensor): Size of desired waveform
-    Returns:
-        torch.Tensor: Reshaped waveform
-    """
-    if len(size) == 1:
-        return reconstructed.squeeze(0)
-    return reconstructed
-
-#%% MCEM algorithm parameters
-niter_MCEM = 10 # number of iterations for the MCEM algorithm - CHNAGE THIS TO 100
-niter_MH = 40 # total number of samples for the Metropolis-Hastings algorithm
-burnin = 30 # number of initial samples to be discarded
-var_MH = 0.01 # variance of the proposal distribution
-tol = 1e-5 # tolerance for stopping the MCEM iterations
-
-def evaluate_vae(vae_model, decoder, mix):
-    shape = _jitable_shape(mix)
-    X = vae_model.encoder(mix.cuda()).cpu().numpy()
-    X = X[0]
-
-    F, N = X.shape
-    g0 = np.ones((1,N))
-    g_tensor0 = torch.from_numpy(g0.astype(np.float32))
-
-
-    #Intermediate representaion
-    _, z, _ = vae_model.forward_masker(torch.Tensor(X[None]).cuda())
-    z = z[0].cuda().T
-
-    Z_init = z.cpu().numpy()
-
-    eps = np.finfo(float).eps
-    K_b = 10 # NMF rank for noise model
-    W0 = np.maximum(np.random.rand(F,K_b), eps)
-    H0 = np.maximum(np.random.rand(K_b,N), eps)
-    V_b0 = W0@H0
-    V_b_tensor0 = torch.from_numpy(V_b0.astype(np.float32))
-    # All-ones initialization of the gain parameters
-    g0 = np.ones((1,N))
-    g_tensor0 = torch.from_numpy(g0.astype(np.float32))
-
-
-    mcem_algo = MCEM_algo(X=X, W=W0, H=H0, Z=Z_init, decoder=decoder,
-              niter_MCEM=niter_MCEM, niter_MH=niter_MH, burnin=burnin,
-              var_MH=var_MH)
-
-    wlen_sec=64e-3
-    fs=8000
-    wlen = int(wlen_sec*fs) # window length of 64 ms
-
-    hop = np.int(wlen//2) # hop size
-    win = np.sin(np.arange(.5,wlen-.5+1)/wlen*np.pi); # sine analysis window
-
-    cost, niter_final = mcem_algo.run(hop=hop, wlen=wlen, win=win)
-    # Separate the sources from the estimated parameters
-    mcem_algo.separate(niter_MH=100, burnin=75)
-    estimate = vae_model.forward_decoder(torch.Tensor(mcem_algo.S_hat).cuda())
-    estimate= _pad_x_to_y(estimate, mix)
-    estimate = _shape_reconstructed(estimate, shape)
-    return estimate 
-    
 
 def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False):
     mix, clean, estimate, snr = batch
@@ -155,15 +57,11 @@ def data_feed_process(queue, signal_queue, model, test_set):
     def model_run(mix):
         if model is None:
             return mix
-        if model.__class__.__name__ == 'VAE':
-            decoder = VAE_Decoder_Eval(model)
-            return evaluate_vae(model, decoder, mix).detach().cpu()
         else:
             return model(mix.cuda()).squeeze(1).detach().cpu()
         
     with torch.no_grad():
         for ix, (mix, clean, snr) in enumerate(loader):
-            print('MODEL NAME: ', model.__class__.__name__)
             enh = model_run(mix)
             queue.put((ix, (mix, clean, enh, snr)))
 
@@ -204,7 +102,6 @@ def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'estoi', 
     signal_queue = Queue()
     input_queue = Queue(maxsize=max_queue_size)
     output_queue = Queue(maxsize=max_queue_size)
-
     
     try:
         feed_pr = Process(target=data_feed_process, args=(input_queue, signal_queue, model, test_set))
@@ -255,7 +152,9 @@ metrics_names = {
 model_labels = {
     'input': 'Input',
     'baseline': 'Baseline DNN',
+    'baseline_512': 'Baseline DNN (win 512)',
     'baseline_1024': 'Baseline DNN v2',
+    'baseline_2048': 'Baseline DNN (win 2048)',
     'baseline_v2': 'Baseline DNN (L1 loss)',
     'baseline_proper_mse': 'Baseline DNN (fixed test set)',
     'baseline_sigmoid': 'Baseline DNN (sigm)',
@@ -269,6 +168,10 @@ model_labels = {
     'smolnet_tms': 'SMoLnet-TMS',
     'smolnet_cirm': 'SMoLnet-cIRM',
     'smolnet_1024': 'SMoLnet v2',
+    'smolnet_dil256': 'SMoLnet-TCS (max dilation 256)',
+    'smolnet_dil64': 'SMoLnet-TCS (max dilation 64)',
+    'smolnet_dil16': 'SMoLnet-TCS (max dilation 16)',
+    'smolnet_dil4': 'SMoLnet-TCS (max dilation 4)',
     'dprnn': 'DPRNN',
     'conv_tasnet': 'Conv-TasNet',
     'dptnet': 'DPTNet',
@@ -278,10 +181,10 @@ model_labels = {
     'segan-nogan': 'SEGAN (L1 loss only)',
     'unetgan': 'UNetGAN',
     'unetgan-nogan': 'UNetGAN (MSE loss only)',
+    'metric-gan': 'MetricGAN',
     'phasen': 'PHASEN',
     'phasen_1024': 'PHASEN v2',
 }
-
 
 main_models = ['baseline', 'vae', 'smolnet', 'smolnet_tms', 'smolnet_cirm',
                'dcunet_20', 'dccrn', 'phasen', 'waveunet_v1', 'demucs',
@@ -321,6 +224,16 @@ def aggregate_results(dfs, metrics=['pesq', 'estoi', 'si_sdr']):
         for name, df in dfs.items()
     }
     
+    
+def plot_single(scores, label, ax, line_kwargs, fill_kwargs):
+    plt.sca(ax)
+    means = scores['mean']
+    stds = scores['std'].values / np.sqrt(scores['count'].values) * 3
+    xs = means.index
+    l = plt.plot(xs, means, label=label, **line_kwargs)
+    plt.fill_between(xs, means - stds, means + stds, alpha=0.2, **fill_kwargs)
+    return l
+    
 
 def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'estoi', 'si_sdr'],
                  plot_name=None, legend='right', legend_ncol=3, legend_pad=0.08, legend_pad_left=0.0,
@@ -335,22 +248,20 @@ def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'estoi', 'si_sdr'],
     for model_name, scores in all_scores.items():
         line_kwargs = lines.get(model_name, {'marker': '.', 'alpha': 0.8})
         fill_kwargs = {}
-        if model_name in model_colors:
-            line_kwargs['color'] = model_colors[model_name]
-            fill_kwargs['color'] = model_colors[model_name]
+        if 'c' not in line_kwargs and model_name in model_colors:
+            line_kwargs['c'] = model_colors[model_name]
+        
+        if 'c' in line_kwargs:
+            fill_kwargs['color'] = line_kwargs['c']
             
         if model_name == 'input':
             line_kwargs = {'c': 'black', 'ls': 'dotted'}
             fill_kwargs = {'color': 'black'}
         
         for i, metric in enumerate(metrics):
-            plt.sca(axes[i])
-            means = scores[metric]['mean']
-            stds = scores[metric]['std'].values / np.sqrt(scores[metric]['count'].values) * 3
-            xs = means.index
-            plt.plot(xs, means, label=labels[model_name], **line_kwargs)
-            plt.fill_between(xs, means - stds, means + stds, alpha=0.2, **fill_kwargs)
-    
+            plot_single(scores[metric], labels[model_name], axes[i], line_kwargs, fill_kwargs)
+            
+
     for i, metric in enumerate(metrics):
         if ax_bgcol is not None:
             axes[i].set_facecolor(ax_bgcol)
@@ -406,7 +317,7 @@ def avg_results_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
 def avg_improvements_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
     total_df = pd.DataFrame(columns=['Model', 'N. of params'] + [metrics_names[m] for m in metrics])
     
-    input_avgs = dfs['input'][metrics].mean(axis=0)
+    input_avgs = dfs['input'][metrics].mean(axis=0)    
     for model_name, df in dfs.items():
         model = models[model_name]
         if model is None:
@@ -499,6 +410,7 @@ def time_evaluate_cpu_all(models, number=1, stft_only=False):
 @hydra.main(config_path='conf', config_name='config')
 def main(args):
     pass
-    
+
+
 if __name__ == "__main__":
     main()

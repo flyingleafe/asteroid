@@ -135,7 +135,7 @@ class PhasenSystem(System):
 
     
 def sisdr_loss_wrapper(est_target, target):
-    return singlesrc_neg_sisdr(est_target.squeeze(1), target).mean()
+    return singlesrc_neg_sisdr(est_target.squeeze(1), target.squeeze(1)).mean()
 
 def mse_loss_wrapper(est_target, target):
     return F.mse_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
@@ -277,10 +277,19 @@ def main(args):
         trainer.fit(system)
         
     else:
-        gpus = args.get('gpus', -1)
-        trainer = Trainer(max_epochs=args.max_epochs, gpus=gpus, accelerator='dp',
-                          logger=tb_logger, callbacks=callbacks, deterministic=True)
+        trainer_kwargs = dict(
+            max_epochs=args.max_epochs,
+            gpus=args.get('gpus', -1),
+            accelerator='dp',
+            logger=tb_logger,
+            callbacks=callbacks,
+            deterministic=True
+        )
         
+        if 'ckpt' in args:
+            trainer_kwargs['resume_from_checkpoint'] = args.ckpt
+        
+        trainer = Trainer(**trainer_kwargs)
         trainer.fit(system)
     
         if model_version:

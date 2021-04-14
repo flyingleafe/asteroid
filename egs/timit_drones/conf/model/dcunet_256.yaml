@@ -1,0 +1,14 @@
+model:
+    _target_: asteroid.DCUNet
+    architecture: "DCUNet-20"
+    stft_n_filters: 256
+    stft_kernel_size: 256
+    stft_stride: 128
+    fix_length_mode: "trim"
+    
+dset:
+    mixture_train:
+        repeat_factor: 30
+
+model_version: 'stft512'
+reduce_lr_patience: 5

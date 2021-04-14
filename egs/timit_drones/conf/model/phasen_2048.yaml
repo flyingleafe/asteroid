@@ -1,0 +1,8 @@
+model:
+    _target_: asteroid.Phasen
+    n_filters: 2048
+    kernel_size: 2048
+    stride: 1024
+    
+model_version: 'stft2048'
+loss: "phasen"
