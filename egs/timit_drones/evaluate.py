@@ -162,16 +162,22 @@ model_labels = {
     'vae': 'VAE',
     'waveunet_v1': 'Wave-U-Net',
     'dcunet_20': 'DCUNet-20',
+    'dcunet_20_512': 'DCUNet-20 (win 512)',
+    'dcunet_20_2048': 'DCUNet-20 (win 2048)',
     'dccrn': 'DCCRN',
     'dccrn_1024': 'DCCRN v2',
+    'dccrn_2048': 'DCCRN (win 2048)',
     'smolnet': 'SMoLnet-TCS',
     'smolnet_tms': 'SMoLnet-TMS',
     'smolnet_cirm': 'SMoLnet-cIRM',
+    'smolnet_256': 'SMoLnet (win 256)',
+    'smolnet_512': 'SMoLnet (win 512)',
     'smolnet_1024': 'SMoLnet v2',
     'smolnet_dil256': 'SMoLnet-TCS (max dilation 256)',
     'smolnet_dil64': 'SMoLnet-TCS (max dilation 64)',
     'smolnet_dil16': 'SMoLnet-TCS (max dilation 16)',
     'smolnet_dil4': 'SMoLnet-TCS (max dilation 4)',
+    'smolnet_dil1': 'SMoLnet-TCS (max dilation 1)',
     'dprnn': 'DPRNN',
     'conv_tasnet': 'Conv-TasNet',
     'dptnet': 'DPTNet',
@@ -183,7 +189,9 @@ model_labels = {
     'unetgan-nogan': 'UNetGAN (MSE loss only)',
     'metric-gan': 'MetricGAN',
     'phasen': 'PHASEN',
+    'phasen_256': 'PHASEN (win 256)',
     'phasen_1024': 'PHASEN v2',
+    'phasen_2048': 'PHASEN (win 2048)',
 }
 
 main_models = ['baseline', 'vae', 'smolnet', 'smolnet_tms', 'smolnet_cirm',
@@ -237,7 +245,7 @@ def plot_single(scores, label, ax, line_kwargs, fill_kwargs):
 
 def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'estoi', 'si_sdr'],
                  plot_name=None, legend='right', legend_ncol=3, legend_pad=0.08, legend_pad_left=0.0,
-                 ax_bgcol=None, labels=None, lines={}, **kwargs): 
+                 ax_bgcol=None, fixed_colors=True, labels=None, lines={}, **kwargs): 
     
     fig, axes = plt.subplots(nrows=1, ncols=len(metrics), figsize=figsize)
     all_scores = aggregate_results(dfs, metrics)
@@ -248,7 +256,7 @@ def plot_results(dfs, figsize=(15, 5), metrics=['pesq', 'estoi', 'si_sdr'],
     for model_name, scores in all_scores.items():
         line_kwargs = lines.get(model_name, {'marker': '.', 'alpha': 0.8})
         fill_kwargs = {}
-        if 'c' not in line_kwargs and model_name in model_colors:
+        if fixed_colors and 'c' not in line_kwargs and model_name in model_colors:
             line_kwargs['c'] = model_colors[model_name]
         
         if 'c' in line_kwargs:

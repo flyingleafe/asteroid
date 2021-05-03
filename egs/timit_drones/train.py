@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import asteroid
 
+from parse import *
 from pathlib import PurePath
 from tqdm import tqdm
 from torch import nn, optim
@@ -61,25 +62,13 @@ class MagnitudeVAESystem(System):
         mix_tf = self.model.forward_encoder(mix)
         clean_tf = self.model.forward_encoder(clean)
         
-        true_irm = torch.minimum(mag(clean_tf) / mag(mix_tf), torch.tensor(1).type_as(mix_tf))
-        est_irm, mu, logvar = self.model.forward_masker(mix_tf)
+        clean_pow = torch.pow(mag(clean_tf), 2)
         
-        #loss = self.loss_func(est_irm, true_irm, mu, logvar)
-        mse_loss = self.loss_func(est_irm, true_irm)
-
-        # loss kld taken from - https://gitlab.inria.fr/smostafa/avse-vae/-/blob/master/train_VAE.py
-        loss_kld = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
-        loss_kld = loss_kld / (mu.shape[0] * mu.shape[1] * mix.shape[0])
-        #import pdb; pdb.set_trace()
-        #normalize kld loss across all dimensions
-        #loss_kld = loss_kld / (mu.shape[0] * mu.shape[1])
-        #loss = mse_loss + loss_kld  
-
-        #pytorch kl - issue - goes to nan - log 0 ?
-        #loss_kld = F.kl_div(mu, logvar)
-        #loss = loss_mse + loss_kld
-
-        return mse_loss
+        # a HACK to not fiddle with datasets changing - training on clean data!
+        est_pow, mu, logvar = self.model.forward_vae_mu_logvar(clean_pow)
+        
+        loss = self.loss_func(est_pow, clean_pow, mu, logvar)
+        return loss
 
 class MagnitudeAESystem(System):
     def common_step(self, batch, batch_nb, train=True):
@@ -162,7 +151,6 @@ def phasen_loss_wrapper(est_target, target):
     phase_loss = F.mse_loss(est_target * est_comp_coeffs, target * true_comp_coeffs)
     
     return (mag_loss + phase_loss) / 2 
-    
 
 def prepare_mixture_set(clean, noises, params, **kwargs):
     mix_type = params.pop('type')
@@ -221,7 +209,6 @@ def prepare_system(args, model, train_loader, val_loader):
         model.compute_scaler(train_loader)
         cls = MagnitudeIRMSystem
     elif isinstance(model, asteroid.VAE):
-        model.compute_scaler(train_loader)
         cls = MagnitudeVAESystem
     elif isinstance(model, asteroid.AutoEncoder):
         model.compute_scaler(train_loader)
@@ -286,8 +273,24 @@ def main(args):
             deterministic=True
         )
         
-        if 'ckpt' in args:
-            trainer_kwargs['resume_from_checkpoint'] = args.ckpt
+        if args.get('resume_from_last_checkpoint', False):
+            version = 'version_0' if model_version is None else model_version
+            ckpt_dir = log_dir / model_name / version / 'checkpoints' 
+            
+            try:
+                ckpts = os.listdir(ckpt_dir)
+            except FileNotFoundError:
+                ckpts = []
+                
+            if len(ckpts) == 0:
+                print('No checkpoints to resume from found')
+            else:
+                # resuming from last epoch always
+                epochs = [search('epoch={:02d}', c).fixed[0] for c in ckpts]
+                max_epoch_idx = epochs.index(max(epochs))
+                last_ckpt = ckpts[max_epoch_idx]
+                ckpt_path = ckpt_dir / last_ckpt
+                trainer_kwargs['resume_from_checkpoint'] = str(ckpt_path)
         
         trainer = Trainer(**trainer_kwargs)
         trainer.fit(system)

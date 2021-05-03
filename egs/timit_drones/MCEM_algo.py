@@ -520,3 +520,4 @@ class VI_MCEM_algo:
         return None
 
 
+win 256
