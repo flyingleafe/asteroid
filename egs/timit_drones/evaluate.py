@@ -45,9 +45,9 @@ def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False
     return res
 
 
-def data_feed_process(queue, signal_queue, model, test_set):
+def data_feed_process(queue, signal_queue, model, test_set, on_cpu=False):
     loader = DataLoader(test_set, num_workers=2)
-    with_cuda = torch.cuda.is_available()
+    with_cuda = torch.cuda.is_available() and not on_cpu
     
     if model is not None:
         if with_cuda:
@@ -58,7 +58,9 @@ def data_feed_process(queue, signal_queue, model, test_set):
         if model is None:
             return mix
         else:
-            return model(mix.cuda()).squeeze(1).detach().cpu()
+            if with_cuda:
+                mix = mix.cuda()
+            return model(mix).squeeze(1).detach().cpu()
         
     with torch.no_grad():
         for ix, (mix, clean, snr) in enumerate(loader):
@@ -87,7 +89,7 @@ def eval_process(proc_idx, input_queue, output_queue, **kwargs):
             
 
 def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'estoi', 'si_sdr'],
-                   sample_rate=8000, max_queue_size=100, use_pypesq=False, use_file_sharing=True, **kwargs):
+                   sample_rate=8000, max_queue_size=100, use_pypesq=False, use_file_sharing=True, on_cpu=False, **kwargs):
     
     if use_file_sharing:
         torch.multiprocessing.set_sharing_strategy('file_system')
@@ -104,7 +106,7 @@ def evaluate_model(model, test_set, num_workers=None, metrics=['pesq', 'estoi', 
     output_queue = Queue(maxsize=max_queue_size)
     
     try:
-        feed_pr = Process(target=data_feed_process, args=(input_queue, signal_queue, model, test_set))
+        feed_pr = Process(target=data_feed_process, args=(input_queue, signal_queue, model, test_set, on_cpu))
         feed_pr.start()
 
         eval_prs = []

@@ -67,7 +67,9 @@ class MagnitudeVAESystem(System):
         # a HACK to not fiddle with datasets changing - training on clean data!
         est_pow, mu, logvar = self.model.forward_vae_mu_logvar(clean_pow)
         
-        loss = self.loss_func(est_pow, clean_pow, mu, logvar)
+        loss, rec_loss, kl_loss = self.loss_func(est_pow, clean_pow, mu, logvar)
+        self.log("rec_loss", rec_loss, logger=True)
+        self.log("kl_loss", kl_loss, logger=True)
         return loss
 
 class MagnitudeAESystem(System):
@@ -130,9 +132,10 @@ def mse_loss_wrapper(est_target, target):
     return F.mse_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
 
 def vae_loss_wrapper(est_target, target, mu, logvar):
-    recon = torch.sum( torch.log(est_target) + target/(est_target) )
+    ratio = target/est_target
+    recon = torch.sum(ratio - torch.log(ratio) - 1 )
     KLD = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
-    return recon + KLD
+    return recon + KLD, recon, KLD
 
 def l1_loss_wrapper(est_target, target):
     return F.l1_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
