@@ -78,13 +78,13 @@ def get_all_metrics_from_model(model, test_sets, model_name=None):
                 denoised_file_paths.append(denoised_file_path)
                 sf.write(denoised_file_path, estimate, samplerate=SAMPLE_RATE)
 
-                #Dont calculate metric just save separated plus, meta data
-                #metrics_dict = get_metrics(mix.cpu().numpy(), clean.numpy(), estimate, sample_rate=SAMPLE_RATE, metrics_list=["pesq"])
-                #metrics_dict["mix_path"] = path
-                #metrics_dict["snr"] = snr
-                #series_list.append(pd.Series(metrics_dict))
-                #all_metrics_df = pd.DataFrame(series_list)             
-                if i == 5 : break
+                ##Dont calculate metric just save separated plus, meta data
+                metrics_dict = get_metrics(mix.cpu().numpy(), clean.numpy(), estimate, sample_rate=SAMPLE_RATE, metrics_list=["pesq"])
+                metrics_dict["mix_path"] = path
+                metrics_dict["snr"] = snr
+                series_list.append(pd.Series(metrics_dict))
+                all_metrics_df = pd.DataFrame(series_list)             
+                if i == 50 : break
 
             csv_path_tmp = csv_path_dict[str(snr)]
             df = pd.read_csv(csv_path_tmp)
@@ -119,6 +119,26 @@ get_all_metrics_from_model(model=dcunet_model, test_sets=test_sets, model_name='
 
 print('get metrics for WaveUNet model')
 get_all_metrics_from_model(model=waveunet_model, test_sets=test_sets, model_name='WaveUNet')
+
+
+loader = DataLoader(test_sets[0], num_workers=0)
+os.makedirs('{save_enhanced_dir}/Input/', exist_ok=True)
+
+#create metadata from clean diles
+clean_file_paths = []
+for i, (mix, clean, path) in tqdm(enumerate(loader)):
+    clean_file_name = path[0].split('/')[-1]
+    clean_file_path = f'{save_enhanced_dir}/Input/{clean_file_name}'
+    clean_file_paths.append(clean_file_path)
+    clean = clean.detach().flatten().cpu().numpy()
+    sf.write(clean_file_path, clean, samplerate=SAMPLE_RATE)
+    if i == 50 : break
+
+file_path_csv_dpt = '/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/drone_noise_out/DPTNet/0dB/DPTNet_snr0dB.csv'
+df = pd.read_csv(file_path_csv_dpt)
+clean_file_paths = pd.Series(clean_file_paths)
+df['clean_path'] = clean_file_paths
+df.to_csv(file_path_csv_dpt)
 
 
 '''
