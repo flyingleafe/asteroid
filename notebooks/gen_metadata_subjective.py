@@ -51,8 +51,6 @@ for snr in tqdm(test_snrs, 'Load datasets'):
         subset='test', random_seed=68 + i, with_path=True)
     i += 1
 
-from asteroid import DPTNet, SMoLnet, RegressionFCNN, DCUNet, WaveUNet
-dptnet_model = DPTNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/dptnet_model.pt')
 
 #directories to save denoised audio in
 save_enhanced_dir = "/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/drone_noise_out/"
@@ -76,33 +74,52 @@ def get_all_metrics_from_model(model, test_sets, model_name=None):
 
                 denoised_file_name = path[0].split('/')[-1]
                 #add a "_" in front of the denoised fie
-                denoised_file_path = f'{save_enhanced_dir}/{str(model_name)}/{snr}dB/data/_{denoised_file_name}'
+                denoised_file_path = f'{save_enhanced_dir}/{str(model_name)}/{snr}dB/data/{model_name}_{denoised_file_name}'
                 denoised_file_paths.append(denoised_file_path)
                 sf.write(denoised_file_path, estimate, samplerate=SAMPLE_RATE)
 
-                metrics_dict = get_metrics(mix.cpu().numpy(), clean.numpy(), estimate, sample_rate=SAMPLE_RATE, metrics_list=["pesq"])
-                metrics_dict["mix_path"] = path
-                metrics_dict["snr"] = snr
-                series_list.append(pd.Series(metrics_dict))
-                all_metrics_df = pd.DataFrame(series_list)             
+                #Dont calculate metric just save separated plus, meta data
+                #metrics_dict = get_metrics(mix.cpu().numpy(), clean.numpy(), estimate, sample_rate=SAMPLE_RATE, metrics_list=["pesq"])
+                #metrics_dict["mix_path"] = path
+                #metrics_dict["snr"] = snr
+                #series_list.append(pd.Series(metrics_dict))
+                #all_metrics_df = pd.DataFrame(series_list)             
                 if i == 5 : break
 
             csv_path_tmp = csv_path_dict[str(snr)]
             df = pd.read_csv(csv_path_tmp)
             denoised_file_paths = pd.Series(denoised_file_paths)
             df['denoised_path'] = denoised_file_paths
-            df_csv_path = f'{save_enhanced_dir}/{str(model_name)}/{snr}dB/snr{snr}dB.csv'
+            df_csv_path = f'{save_enhanced_dir}/{str(model_name)}/{snr}dB/{model_name}_snr{snr}dB.csv'
             df.to_csv(df_csv_path)
-    return all_metrics_df
+    return None
 
 
 #directory to store evaluation results in
-os.makedirs('evaluation', exist_ok=True)
+#os.makedirs('evaluation', exist_ok=True)
 
+from asteroid import DPTNet, SMoLnet, RegressionFCNN, DCUNet, WaveUNet
+baseline_model = RegressionFCNN.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/baseline_model_v1.pt')
+smolnet_model = SMoLnet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/SMoLnet.pt')
+dcunet_model = DCUNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/dcunet_20_random_v2.pt')
+dptnet_model = DPTNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/dptnet_model.pt')
+waveunet_model = WaveUNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/waveunet_model_adapt.pt')
 
 print('get metrics for DPTNet')
-dpt_metrics = get_all_metrics_from_model(model=dptnet_model, test_sets=test_sets, model_name='DPTNet')
-dpt_metrics.to_csv('evaluation/pesq_dptnet.csv')
+get_all_metrics_from_model(model=dptnet_model, test_sets=test_sets, model_name='DPTNet')
+
+print('get metrics for Regression model')
+get_all_metrics_from_model(model=baseline_model, test_sets=test_sets, model_name='RegressionFCNN')
+
+print('get metrics for SMoLnet model')
+get_all_metrics_from_model(model=smolnet_model, test_sets=test_sets, model_name='SMoLnet')
+
+print('get metrics for DCUNet model')
+get_all_metrics_from_model(model=dcunet_model, test_sets=test_sets, model_name='DCUNet')
+
+print('get metrics for WaveUNet model')
+get_all_metrics_from_model(model=waveunet_model, test_sets=test_sets, model_name='WaveUNet')
+
 
 '''
 #print('get metrics for DPRNN')
