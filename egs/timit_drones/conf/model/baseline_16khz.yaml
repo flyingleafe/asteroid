@@ -1,0 +1,13 @@
+model:
+    _target_: asteroid.RegressionFCNN
+    
+dset:
+    timit: ${env:HOME}/datasets/TIMIT_16khz
+    noises: ${env:HOME}/datasets/noises_16khz
+    
+sample_rate: 16000
+model_version: '16khz'
+
+loss: "mse"
+lr: 1e-4
+reduce_lr_patience: 5

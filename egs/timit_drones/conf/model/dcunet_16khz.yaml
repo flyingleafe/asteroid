@@ -1,0 +1,16 @@
+model:
+    _target_: asteroid.DCUNet
+    architecture: "DCUNet-20"
+    fix_length_mode: "trim"
+
+
+dset:
+    timit: ${env:HOME}/datasets/TIMIT_16khz
+    noises: ${env:HOME}/datasets/noises_16khz
+    
+    mixture_train:
+        repeat_factor: 30
+    
+sample_rate: 16000
+model_version: '16khz'
+reduce_lr_patience: 5

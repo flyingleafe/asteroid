@@ -568,7 +568,7 @@ class DCCRMaskNet(BaseDCUMaskNet):
 
     _architectures = DCCRN_ARCHITECTURES
 
-    def __init__(self, encoders, decoders, n_freqs, **kwargs):
+    def __init__(self, encoders, decoders, n_freqs, lstm=True, **kwargs):
         self.encoders_stride_product = np.prod(
             [enc_stride for _, _, _, enc_stride, _ in encoders], axis=0
         )
@@ -579,15 +579,17 @@ class DCCRMaskNet(BaseDCUMaskNet):
         # Avoid circual import
         from .convolutional import DCUNetComplexDecoderBlock, DCUNetComplexEncoderBlock
 
+        encoder_blocks = [DCUNetComplexEncoderBlock(*args, activation="prelu") for args in encoders]
+        if lstm:
+            encoder_blocks.append(DCCRMaskNetRNN(np.prod(last_encoder_out_shape)))
+            
+        decoder_blocks = [DCUNetComplexDecoderBlock(*args, activation="prelu") for args in decoders[:-1]]
+        if lstm:
+            decoder_blocks.insert(0, torch.nn.Identity())
+        
         super().__init__(
-            encoders=[
-                *(DCUNetComplexEncoderBlock(*args, activation="prelu") for args in encoders),
-                DCCRMaskNetRNN(np.prod(last_encoder_out_shape)),
-            ],
-            decoders=[
-                torch.nn.Identity(),
-                *(DCUNetComplexDecoderBlock(*args, activation="prelu") for args in decoders[:-1]),
-            ],
+            encoders=encoder_blocks,
+            decoders=decoder_blocks,
             output_layer=complex_nn.ComplexConvTranspose2d(*decoders[-1]),
             **kwargs,
         )

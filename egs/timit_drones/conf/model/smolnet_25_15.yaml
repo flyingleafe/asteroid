@@ -1,0 +1,11 @@
+model:
+    _target_: asteroid.SMoLnet
+
+dset:
+    mixture_train:
+        snr_range: [-25, 15]
+
+model_version: 'snr25_15'
+loss: "mse"
+lr: 1e-4
+crop_length: 10240

@@ -2,8 +2,8 @@ defaults:
     - model: baseline
 
 dset:
-    #timit: ${env:HOME}/datasets/TIMIT
-    timit: /import/vision-eddydata/dm005_tmp/TIMIT_8kHZ
+    timit: ${env:HOME}/datasets/TIMIT
+    #timit: /import/vision-eddydata/dm005_tmp/TIMIT_8kHZ
     noises: ${env:HOME}/datasets/noises
     
     mixture_train:
