@@ -1,0 +1,12 @@
+model:
+    _target_: asteroid.DCUNet
+    architecture: "DCUNet-20"
+    fix_length_mode: "trim"
+    
+dset:
+    mixture_train:
+        repeat_factor: 30
+        snr_range: [-25, 15]
+
+model_version: 'snr25_15'
+reduce_lr_patience: 5

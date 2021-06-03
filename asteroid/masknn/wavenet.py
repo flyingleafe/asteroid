@@ -61,7 +61,7 @@ class UpSamplingLayer(nn.Module):
     
 class Waveunet(nn.Module):
     def __init__(self, n_layers=12, channels_interval=24, n_src=1,
-                 middle_layer=[(15, 1)]):
+                 middle_layer=[(15, 1)], lstm=False):
         super().__init__()
 
         self.n_src = n_src
@@ -88,6 +88,11 @@ class Waveunet(nn.Module):
             for (k, d) in middle_layer
         ]
         self.middle = nn.Sequential(*middle_layer)
+        
+        if lstm:
+            self.lstm = nn.LSTM(num_layers=2, hidden_size=middle_layer_size, input_size=middle_layer_size)
+        else:
+            self.lstm = None
 
         decoder_in_channels_list = [(2 * i + 1) * self.channels_interval for i in range(1, self.n_layers)] + [
             2 * self.n_layers * self.channels_interval]
@@ -137,6 +142,11 @@ class Waveunet(nn.Module):
             o = o[:, :, ::2]
 
         o = self.middle(o)
+        
+        if self.lstm is not None:
+            o = o.permute(2, 0, 1)
+            o, _ = self.lstm(o)
+            o = o.permute(1, 2, 0)
 
         # Down Sampling
         for i in range(self.n_layers):

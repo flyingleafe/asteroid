@@ -1,0 +1,11 @@
+model:
+    _target_: asteroid.WaveUNet
+    lstm: true
+
+dset:
+    mixture_train:
+        repeat_factor: 30
+    
+model_version: 'lstm'
+loss: "mse"
+crop_length: 16384

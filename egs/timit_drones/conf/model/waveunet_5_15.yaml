@@ -1,0 +1,11 @@
+model:
+    _target_: asteroid.WaveUNet
+
+dset:
+    mixture_train:
+        repeat_factor: 30
+        snr_range: [-5, 15]
+    
+model_version: 'snr5_15'
+loss: "mse"
+crop_length: 16384
