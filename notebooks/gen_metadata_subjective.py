@@ -84,7 +84,7 @@ def get_all_metrics_from_model(model, test_sets, model_name=None):
                 metrics_dict["snr"] = snr
                 series_list.append(pd.Series(metrics_dict))
                 all_metrics_df = pd.DataFrame(series_list)             
-                if i == 50 : break
+                if i == 30 : break
 
             csv_path_tmp = csv_path_dict[str(snr)]
             df = pd.read_csv(csv_path_tmp)
@@ -122,22 +122,35 @@ get_all_metrics_from_model(model=waveunet_model, test_sets=test_sets, model_name
 
 
 loader = DataLoader(test_sets[0], num_workers=0)
-os.makedirs('{save_enhanced_dir}/Input/', exist_ok=True)
+os.makedirs('{save_enhanced_dir}/Clean/', exist_ok=True)
+os.makedirs('{save_enhanced_dir}/Noisy/', exist_ok=True)
 
 #create metadata from clean diles
 clean_file_paths = []
+mix_file_paths = []
 for i, (mix, clean, path) in tqdm(enumerate(loader)):
     clean_file_name = path[0].split('/')[-1]
-    clean_file_path = f'{save_enhanced_dir}/Input/{clean_file_name}'
+    mix_file_name = path[0].split('/')[-1]
+
+    clean_file_path = f'{save_enhanced_dir}/Clean/clean_{clean_file_name}'
+    mix_file_path = f'{save_enhanced_dir}/Noisy/noisy_{mix_file_name}'
+
     clean_file_paths.append(clean_file_path)
+    mix_file_paths.append(mix_file_path)
+
     clean = clean.detach().flatten().cpu().numpy()
+    mix = mix.detach().flatten().cpu().numpy()
+
     sf.write(clean_file_path, clean, samplerate=SAMPLE_RATE)
-    if i == 50 : break
+    sf.write(mix_file_path, mix, samplerate=SAMPLE_RATE)
+    if i == 30 : break
 
 file_path_csv_dpt = '/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/drone_noise_out/DPTNet/0dB/DPTNet_snr0dB.csv'
 df = pd.read_csv(file_path_csv_dpt)
 clean_file_paths = pd.Series(clean_file_paths)
+mix_file_paths = pd.Series(mix_file_paths)
 df['clean_path'] = clean_file_paths
+df['noisy_path'] = mix_file_paths
 df.to_csv(file_path_csv_dpt)
 
 
