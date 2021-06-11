@@ -164,11 +164,14 @@ model_labels = {
     'baseline_5_15': 'Baseline (-5, 15) dB',
     'baseline_25_15': 'Baseline (-25, 15) dB',
     'baseline_16khz': 'Baseline (16 khz)',
-    'vae': 'VAE',
+    'vae': 'A-VAE',
+    'vae_simple': 'A-VAE',
     'waveunet_v1': 'Wave-U-Net',
     'waveunet_5_15': 'Wave-U-Net (-5, 15) dB',
     'waveunet_25_15': 'Wave-U-Net (-25, 15) dB',
     'waveunet_16khz': 'Wave-U-Net (16 khz)',
+    'waveunet_sisdr': 'Wave-U-Net (SI-SDR loss)',
+    'waveunet_lstm': 'Wave-U-Net (+LSTM)',
     'dcunet_20': 'DCUNet-20',
     'dcunet_20_512': 'DCUNet-20 (win 512)',
     'dcunet_20_2048': 'DCUNet-20 (win 2048)',
@@ -178,6 +181,7 @@ model_labels = {
     'dccrn': 'DCCRN',
     'dccrn_1024': 'DCCRN v2',
     'dccrn_2048': 'DCCRN (win 2048)',
+    'dccrn_nolstm': 'DCCRN (no LSTM)',
     'smolnet': 'SMoLnet-TCS',
     'smolnet_tms': 'SMoLnet-TMS',
     'smolnet_cirm': 'SMoLnet-cIRM',
@@ -336,27 +340,41 @@ def avg_results_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
     total_df = total_df.style.apply(highlight_max)
     return total_df
 
-def avg_improvements_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr']):
-    total_df = pd.DataFrame(columns=['Model', 'N. of params'] + [metrics_names[m] for m in metrics])
+def avg_improvements_table(dfs, models, metrics=['pesq', 'estoi', 'si_sdr'], how='abs',
+                           snrs_allowed=[-25, -20, -15, -10]):
+    total_df = pd.DataFrame(columns=['Model'] + [metrics_names[m] for m in metrics])
     
-    input_avgs = dfs['input'][metrics].mean(axis=0)    
+    input_df = dfs['input']
+    
+    if snrs_allowed is not None:
+        input_df = input_df[input_df['snr'].isin(snrs_allowed)]
+            
+    input_avgs = input_df[metrics].mean(axis=0)    
+        
     for model_name, df in dfs.items():
         model = models[model_name]
         if model is None:
             continue
         
-        if hasattr(model, 'generator'):
-            params = model.generator.parameters()
-        else:
-            params = model.parameters()
+#         if hasattr(model, 'generator'):
+#             params = model.generator.parameters()
+#         else:
+#             params = model.parameters()
             
-        param_count = sum(p.numel() for p in params if p.requires_grad)
-        param_approx = np.around(param_count / 1000000, decimals=2)
+#         param_count = sum(p.numel() for p in params if p.requires_grad)
+#         param_approx = np.around(param_count / 1000000, decimals=2)
+        
+        if snrs_allowed is not None:
+            df = df[df['snr'].isin(snrs_allowed)]
         
         avgs = df[metrics].mean(axis=0)
-        improvements = np.round(((avgs - input_avgs) / np.abs(input_avgs)) * 100, 1)
         
-        total_df.loc[len(total_df)] = [model_labels[model_name], f'{param_approx}M'] + list(improvements)
+        if how == 'rel':
+            improvements = np.round(((avgs - input_avgs) / np.abs(input_avgs)) * 100, 1)
+        elif how == 'abs':
+            improvements = avgs - input_avgs
+        
+        total_df.loc[len(total_df)] = [model_labels[model_name]] + list(improvements)
         
     total_df = total_df.style.apply(highlight_max)
     return total_df

@@ -71,6 +71,27 @@ class MagnitudeVAESystem(System):
         self.log("rec_loss", rec_loss, logger=True)
         self.log("kl_loss", kl_loss, logger=True)
         return loss
+    
+
+class MagnitudeSimpleVAESystem(System):
+    def common_step(self, batch, batch_nb, train=True):
+        mix, clean = batch
+        mix = unsqueeze_to_3d(mix)
+        clean = unsqueeze_to_3d(clean)
+        
+        mix_tf = self.model.forward_encoder(mix)
+        clean_tf = self.model.forward_encoder(clean)
+        
+        clean_pow = torch.pow(mag(clean_tf), 2)
+        mix_pow = torch.pow(mag(mix_tf), 2)
+        
+        est_pow, mu, logvar = self.model.forward_vae_mu_logvar(mix_pow)
+        
+        loss, rec_loss, kl_loss = self.loss_func(est_pow, clean_pow, mu, logvar)
+        self.log("rec_loss", rec_loss, logger=True)
+        self.log("kl_loss", kl_loss, logger=True)
+        return loss
+
 
 class MagnitudeAESystem(System):
     def common_step(self, batch, batch_nb, train=True):
@@ -136,6 +157,11 @@ def vae_loss_wrapper(est_target, target, mu, logvar):
     recon = torch.sum(ratio - torch.log(ratio) - 1 )
     KLD = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
     return recon + KLD, recon, KLD
+
+def vae_simple_loss_wrapper(est_target, target, mu, logvar):
+    recon = F.mse_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
+    KLD = -0.5 * torch.sum(logvar - mu.pow(2) - logvar.exp())
+    return recon + 1e-5 * KLD, recon, KLD
 
 def l1_loss_wrapper(est_target, target):
     return F.l1_loss(unsqueeze_to_3d(est_target), unsqueeze_to_3d(target))
@@ -205,6 +231,8 @@ def prepare_system(args, model, train_loader, val_loader):
         loss = mse_loss_wrapper
     elif args.loss == "vae_loss":
         loss = vae_loss_wrapper
+    elif args.loss == "simple_vae_loss":
+        loss = vae_simple_loss_wrapper
     else:
         raise ValueError(f'Unsupported loss type `{args.loss}`')
     
@@ -212,7 +240,11 @@ def prepare_system(args, model, train_loader, val_loader):
         model.compute_scaler(train_loader)
         cls = MagnitudeIRMSystem
     elif isinstance(model, asteroid.VAE):
-        cls = MagnitudeVAESystem
+        if args.get('model_version', None) == 'simple':
+            print('Training simple VAE (on noisy data)')
+            cls = MagnitudeSimpleVAESystem
+        else:
+            cls = MagnitudeVAESystem
     elif isinstance(model, asteroid.AutoEncoder):
         model.compute_scaler(train_loader)
         cls = MagnitudeAESystem
