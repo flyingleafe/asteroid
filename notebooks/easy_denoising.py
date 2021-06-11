@@ -2,11 +2,11 @@
 import librosa 
 import soundfile as sf
 from asteroid import DPTNet, SMoLnet, RegressionFCNN, DCUNet, WaveUNet
-import numpy
+import numpy as np
 import torch
 
 def denoise_audio(audio_path, model, denoised_file_path):
-    noisy, sr = librosa.load(audio_path)
+    noisy, sr = librosa.load(audio_path, sr=8000)
     noisy = torch.tensor(noisy)
     noisy = noisy.cuda()
     model = model.cuda()
@@ -26,7 +26,7 @@ waveunet_model = WaveUNet.from_pretrained('Drone_Models_selected/waveunet_model_
 # waveunet_model = WaveUNet.from_pretrained('/jmain01/home/JAD007/txk02/aaa18-txk02/Datasets/Drone_Models_selected/waveunet_model_adapt.pt')
 
 noisy_path = 'test1.wav'
-model = baseline_model
+model = smolnet_model
 # denoised_file_path = audio_path + 'denoised.wav'
 denoised_file_path =  'denoised.wav'
 denoise_audio(noisy_path, baseline_model, denoised_file_path)
