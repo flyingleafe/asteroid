@@ -101,8 +101,12 @@ def _batch_head(batch):
         return batch[0], batch[1:]
     return batch, None
 
-def _batch_cons(head, tail):
-    if tail is not None:
+def _batch_cons(head, *tails):
+    tail = [
+        el for t in tails if t is not None
+        for el in t
+    ]
+    if len(tail) > 0:
         if not isinstance(head, (list, tuple)):
             head = [head]
         return tuple(list(head) + list(tail))
@@ -205,8 +209,8 @@ class FixedMixtureSet(Dataset):
 
     def __getitem__(self, idx):        
         clean_ix, noise_ix, snr, clean_offset, noise_offset = self.mapping[idx]
-        clean, tail = _batch_head(self.clean[clean_ix])
-        noise = self.noises[noise_ix]
+        clean, clean_tail = _batch_head(self.clean[clean_ix])
+        noise, noise_tail = _batch_head(self.noises[noise_ix])
         
         if self.crop_length is not None:
             clean = crop_or_wrap(clean, self.crop_length, clean_offset)
@@ -217,10 +221,11 @@ class FixedMixtureSet(Dataset):
         mix = torch.from_numpy(mix)
         clean = torch.from_numpy(clean)
         
+        snrs = []
         if self.with_snr:
-            tail = [snr] if tail is None else [snr] ++ tail
+            snrs = [snr]
         
-        return _batch_cons([mix, clean], tail)
+        return _batch_cons([mix, clean], snrs, clean_tail, noise_tail)
     
     
 class RandomMixtureSet(Dataset):

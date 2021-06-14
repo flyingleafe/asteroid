@@ -268,7 +268,9 @@ def main(args):
     model_params = dict(args.model)
     model_params['sample_rate'] = args.sample_rate
     
-    model = hydra.utils.instantiate(model_params)
+    model_conf = hydra.utils.instantiate(model_params)
+    model = model_conf['model']
+    
     model_version = args.get('model_version', None)
     model_name = model.__class__.__name__
     logger.info(f'Training model: {model_name}')
