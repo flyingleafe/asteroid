@@ -60,10 +60,8 @@ class System(pl.LightningModule):
         self.val_loader = val_loader
         self.scheduler = scheduler
         self.config = {} if config is None else config
-        # hparams will be logged to Tensorboard as text variables.
-        # summary writer doesn't support None for now, convert to strings.
-        # See https://github.com/pytorch/pytorch/issues/33140
-        self.hparams = Namespace(**self.config_to_hparams(self.config))
+        # Save lightning's AttributeDict under self.hparams
+        self.save_hyperparameters(self.config_to_hparams(self.config))
 
     def forward(self, *args, **kwargs):
         """Applies forward pass of the model.
@@ -196,7 +194,7 @@ class System(pl.LightningModule):
             if v is None:
                 dic[k] = str(v)
             elif isinstance(v, (list, tuple)):
-                dic[k] = torch.Tensor(v)
+                dic[k] = torch.tensor(v)
         return dic
 
 

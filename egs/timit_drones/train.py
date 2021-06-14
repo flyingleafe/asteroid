@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import asteroid
 
+from omegaconf import OmegaConf
 from parse import *
 from pathlib import PurePath
 from tqdm import tqdm
@@ -267,6 +268,11 @@ def main(args):
     
     model_params = dict(args.model)
     model_params['sample_rate'] = args.sample_rate
+    
+    dict_args = dict(args)
+    del dict_args['model']
+    args = OmegaConf.create(dict_args)
+    args = OmegaConf.merge(args, model_params)
     
     model_conf = hydra.utils.instantiate(model_params)
     model = model_conf['model']
