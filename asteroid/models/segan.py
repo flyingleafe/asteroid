@@ -462,6 +462,12 @@ class SEGAN(BaseGAN):
         else:
             return apply_model_chunked(partial(self.generator, z=z), wav, 16384)
     
+    def valid_length(self, length):
+        rem = length % 16384
+        if rem == 0:
+            return length
+        return length + (16384 - rem)
+    
     def get_model_args(self):
         return {
             'sample_rate': self.sample_rate,

@@ -16,6 +16,9 @@ class Demucs(BaseWavenetModel):
         else:
             return apply_model_chunked(self.wavenet, wav, valid_length)
     
+    def valid_length(self, length):
+        return self.wavenet.valid_length(length)
+    
     def get_model_args(self):
         #return empty atm as configs are hardcoded for now
         return {

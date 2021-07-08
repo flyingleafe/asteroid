@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, random_split
 from asteroid.data import TimitDataset
 from asteroid.data.utils import CachedWavSet, RandomMixtureSet, FixedMixtureSet
 from asteroid_filterbanks.transforms import mag, reim
+from functools import partial
 
 from pytorch_lightning import Trainer, seed_everything, loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -216,6 +217,13 @@ def prepare_dataloaders(args):
     
     return train_loader, val_loader
 
+
+def init_weights(m, gain):
+    if isinstance(m, nn.Conv2d):
+        nn.init.xavier_normal_(m.weight, gain=gain)
+        if m.bias is not None:
+            m.bias.data.fill_(0.01)
+    
 def prepare_system(args, model, train_loader, val_loader):
     # TBD: completely different preparation for GANs
     
@@ -254,6 +262,11 @@ def prepare_system(args, model, train_loader, val_loader):
     elif isinstance(model, asteroid.Phasen):
         cls = PhasenSystem
     else:
+        if isinstance(model, (asteroid.DCUNet, asteroid.DCCRNet)):
+            print('Applying Glorot initialization to the model weights')
+            lrelu_gain = nn.init.calculate_gain('leaky_relu', 0.01)
+            model.apply(partial(init_weights, gain=lrelu_gain))
+            
         cls = System
         
     return cls(model, optimizer, loss, train_loader, val_loader, scheduler)

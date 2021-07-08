@@ -1,0 +1,11 @@
+model:
+    _target_: asteroid.DCUNet
+    architecture: "DCUNet-20"
+    fix_length_mode: "pad"
+
+
+dset:    
+    mixture_train:
+        repeat_factor: 30
+
+reduce_lr_patience: 5

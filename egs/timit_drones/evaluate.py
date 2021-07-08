@@ -1,5 +1,6 @@
 import hydra
 import torch
+import torch.nn.functional as F
 import os
 import numpy as np
 import pandas as pd
@@ -16,6 +17,7 @@ from pystoi import stoi
 
 from asteroid.models import BaseModel
 from asteroid.metrics import get_metrics
+from asteroid.utils.torch_utils import pad_x_to_y, unsqueeze_to_3d
 
 def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False):
     mix, clean, estimate, snr = batch
@@ -44,6 +46,8 @@ def _eval(batch, metrics, including='output', sample_rate=8000, use_pypesq=False
     res['snr'] = snr[0].item()
     return res
 
+def pad_reflect(wav, num):
+    return F.pad(unsqueeze_to_3d(wav), (0, num), mode='reflect')
 
 def data_feed_process(queue, signal_queue, model, test_set, on_cpu=False):
     loader = DataLoader(test_set, num_workers=2)
@@ -60,7 +64,12 @@ def data_feed_process(queue, signal_queue, model, test_set, on_cpu=False):
         else:
             if with_cuda:
                 mix = mix.cuda()
-            return model(mix).squeeze(1).detach().cpu()
+            
+            current_len = len(mix.flatten())
+            valid_len = model.valid_length(current_len)
+            padded_mix = pad_reflect(mix, valid_len - current_len)
+            enh = model(padded_mix).squeeze(1).detach()
+            return pad_x_to_y(enh, mix).cpu()
         
     with torch.no_grad():
         for ix, (mix, clean, snr) in enumerate(loader):
@@ -173,6 +182,7 @@ model_labels = {
     'waveunet_sisdr': 'Wave-U-Net (SI-SDR loss)',
     'waveunet_lstm': 'Wave-U-Net (+LSTM)',
     'dcunet_20': 'DCUNet-20',
+    'dcunet_20_fixed': 'DCUNet-20 (fixed)',
     'dcunet_20_512': 'DCUNet-20 (win 512)',
     'dcunet_20_2048': 'DCUNet-20 (win 2048)',
     'dcunet_20_5_15': 'DCUNet-20 (-5, 15) dB',

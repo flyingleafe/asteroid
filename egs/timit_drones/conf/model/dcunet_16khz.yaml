@@ -1,7 +1,7 @@
 model:
     _target_: asteroid.DCUNet
     architecture: "DCUNet-20"
-    fix_length_mode: "trim"
+    fix_length_mode: "pad"
 
 
 dset:

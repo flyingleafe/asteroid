@@ -223,7 +223,7 @@ class GANSystem(System):
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = {} if config is None else config
-        self.hparams = Namespace(**self.config_to_hparams(self.config))
+        self.save_hyperparameters(self.config_to_hparams(self.config))
         
     def forward(self, *args, **kwargs):
         return self.model.forward_generator(*args, **kwargs)

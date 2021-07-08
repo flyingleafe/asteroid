@@ -1,0 +1,9 @@
+model:
+    _target_: asteroid.ConvTasNet
+    n_src: 1
+    
+dset:
+    mixture_train:
+        repeat_factor: 30
+        
+reduce_lr_patience: 5

@@ -82,3 +82,15 @@ class DCUNet(BaseDCUNet):
     """
 
     masknet_class = DCUMaskNet
+    
+    def valid_length(self, length):
+        gap = self.stft_kernel_size - self.stft_stride
+        strides = (length - gap) // self.stft_stride
+        plus_stride = int((length - gap) % self.stft_stride > 0)
+        
+        time_prod = int(self.masker.encoders_stride_product[1])
+        time_remainder = (strides + plus_stride - 1) % time_prod
+        
+        additional_frames = (time_prod - time_remainder) if time_remainder else 0
+        
+        return (strides + plus_stride + additional_frames) * self.stft_stride + gap

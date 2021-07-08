@@ -318,6 +318,30 @@ class BaseEncoderMaskerDecoder(BaseModel):
         """
         return self.decoder(masked_tf_rep)
 
+    def valid_length(self, length):
+        """
+        Returns the smallest length `L > length` such that for the `wav` of length L holds:
+        `len(decoder(encoder(wav))) == L`
+        
+        The method assumes that encoder and decoder have the same stride and kernel size.
+        
+        Args:
+            length: Lower bound for L (e.g. a length of input waveform which is about to be padded to L)
+            
+        Returns:
+            int: Valid length L
+        """
+        fb_conf = self.encoder.get_config()
+        kernel_size = fb_conf['kernel_size']
+        stride = fb_conf['stride']
+        
+        gap = kernel_size - stride
+        remainder = (length - gap) % stride
+        
+        if remainder:
+            return length + (stride - remainder)
+        return length
+    
     def get_model_args(self):
         """ Arguments needed to re-instantiate the model. """
         fb_config = self.encoder.filterbank.get_config()

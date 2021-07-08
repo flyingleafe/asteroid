@@ -1,5 +1,6 @@
 model:
     _target_: asteroid.VAE
+    hidden_dim_encoder: 2048
     
 model_version: "simple"
 loss: "simple_vae_loss"

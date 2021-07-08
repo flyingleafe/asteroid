@@ -4,7 +4,7 @@ model:
     stft_n_filters: 2048
     stft_kernel_size: 2048
     stft_stride: 1024
-    fix_length_mode: "trim"
+    fix_length_mode: "pad"
     
 dset:
     mixture_train:

@@ -1,0 +1,9 @@
+model:
+    _target_: asteroid.WaveUNet
+
+dset:
+    mixture_train:
+        repeat_factor: 30
+
+loss: "mse"
+crop_length: 16384
