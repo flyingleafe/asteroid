@@ -274,11 +274,6 @@ def prepare_system(args, model, train_loader, val_loader):
 
 @hydra.main(config_path='conf', config_name='config')
 def main(args):
-    download_datasets(args)
-    
-    seed_everything(args.random_seed)
-    train_loader, val_loader = prepare_dataloaders(args)
-    
     model_params = dict(args.model)
     model_params['sample_rate'] = args.sample_rate
     
@@ -286,6 +281,11 @@ def main(args):
     del dict_args['model']
     args = OmegaConf.create(dict_args)
     args = OmegaConf.merge(args, model_params)
+
+    download_datasets(args)
+    
+    seed_everything(args.random_seed)
+    train_loader, val_loader = prepare_dataloaders(args)
     
     model_conf = hydra.utils.instantiate(model_params)
     model = model_conf['model']
