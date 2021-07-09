@@ -1,0 +1,8 @@
+asteroid.models.auto\_encoder module
+====================================
+
+.. automodule:: asteroid.models.auto_encoder
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

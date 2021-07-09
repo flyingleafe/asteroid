@@ -1,0 +1,8 @@
+asteroid.models.metric\_gan module
+==================================
+
+.. automodule:: asteroid.models.metric_gan
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

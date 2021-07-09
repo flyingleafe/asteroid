@@ -1,0 +1,8 @@
+asteroid.models.segan module
+============================
+
+.. automodule:: asteroid.models.segan
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

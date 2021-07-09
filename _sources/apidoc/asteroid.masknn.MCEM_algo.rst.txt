@@ -1,0 +1,8 @@
+asteroid.masknn.MCEM\_algo module
+=================================
+
+.. automodule:: asteroid.masknn.MCEM_algo
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

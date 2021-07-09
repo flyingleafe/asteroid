@@ -1,0 +1,695 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>asteroid.models.phasen module &mdash; asteroid 0.4.0rc1 documentation</title>
+  
+
+  
+  
+  
+  
+    <link rel="canonical" href="https://github.com/asteroid-team/asteroidapidoc/asteroid.models.phasen.html"/>
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://mpariente.github.io/asteroid/" aria-label="PyTorch">
+       <!-- <img class="call-to-action-img" src="../_static/images/asteroid_logo_dark.png"/> -->
+      </a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://colab.research.google.com/github/mpariente/asteroid/blob/master/notebooks/00_GettingStarted.ipynb">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://mpariente.github.io/asteroid/">Blog</a>
+          </li>
+
+          <li>
+            <a href="">Tutorials</a>
+          </li>
+
+          <li class="active">
+            <a href="https://mpariente.github.io/asteroid/">Docs</a>
+          </li>
+
+          <li>
+            <div class="resources-dropdown">
+              <a id="resourcesDropdownButton" data-toggle="resources-dropdown">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://mpariente.github.io/asteroid/"">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <!--
+                <a class="nav-dropdown-item" href="https://mpariente.github.io/asteroid/">
+                  <span class=dropdown-title>About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                -->
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/mpariente/asteroid">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.4.0
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <p><span class="caption-text">Start here</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../why_use_asteroid.html">What is Asteroid?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+</ul>
+<p><span class="caption-text">Notebooks and Tutorials</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference external" href="http://colab.research.google.com/github/asteroid-team/asteroid/blob/master/notebooks/00_GettingStarted.ipynb">Getting started with Asteroid</a></li>
+<li class="toctree-l1"><a class="reference external" href="http://colab.research.google.com/github/asteroid-team/asteroid/blob/master/notebooks/01_AsteroidOverview.ipynb">Introduction and Overview</a></li>
+<li class="toctree-l1"><a class="reference external" href="http://colab.research.google.com/github/asteroid-team/asteroid/blob/master/notebooks/02_Filterbank.ipynb">Understanding the Filterbank API</a></li>
+<li class="toctree-l1"><a class="reference external" href="http://colab.research.google.com/github/asteroid-team/asteroid/blob/master/notebooks/03_PITLossWrapper.ipynb">Our PITLossWrapper explained</a></li>
+<li class="toctree-l1"><a class="reference external" href="http://colab.research.google.com/github/asteroid-team/asteroid/blob/master/notebooks/04_ProcessLargeAudioFiles.ipynb">Processing large wav files</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://colab.research.google.com/drive/1BDNQZBJCDcwQhSguf3XBE7ff2KXhWu_j">Community: Numpy vs. Asteroid STFT</a></li>
+</ul>
+<p><span class="caption-text">Asteroid</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../readmes/egs_README.html">What is a recipe?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../supported_datasets.html">Datasets and tasks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../training_and_evaluation.html">Training and Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmes/pretrained_models.html">Pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli.html">Command-line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq.html">FAQ</a></li>
+</ul>
+<p><span class="caption-text">Package reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/data.html">PyTorch Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/filterbanks.html">Filterbank API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/blocks.html">DNN building blocks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/losses.html">Losses &amp; Metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/system.html">Lightning Wrapper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/optimizers.html">Optimizers &amp; Schedulers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/dsp.html">DSP Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_reference/utils.html">Utils</a></li>
+</ul>
+<p><span class="caption-text">Community</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contribution_guide.html">Asteroid High-Level Contribution Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../readmes/CONTRIBUTING.html">How to contribute</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+      <li>asteroid.models.phasen module</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/apidoc/asteroid.models.phasen.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="module-asteroid.models.phasen">
+<span id="asteroid-models-phasen-module"></span><h1>asteroid.models.phasen module<a class="headerlink" href="#module-asteroid.models.phasen" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="asteroid.models.phasen.PhasenConv2d">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">PhasenConv2d</code><span class="sig-paren">(</span><em class="sig-param">in_channels: int, out_channels: int, kernel_size: Tuple[int, int]</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L22-L34"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenConv2d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Conv2d.html#torch.nn.Conv2d" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Conv2d</span></code></a></p>
+<p>Conv2d for Phasen (keeping time/frequency dimention not changed)</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.PhasenBatchNorm1d">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">PhasenBatchNorm1d</code><span class="sig-paren">(</span><em class="sig-param">num_features: int</em>, <em class="sig-param">non_linear: str = 'relu'</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L37-L48"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenBatchNorm1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.BatchNorm1d.html#torch.nn.BatchNorm1d" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.BatchNorm1d</span></code></a></p>
+<p>BatchNorm1d for Phasen (following a non-linear layer)</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.PhasenBatchNorm1d.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">inp: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L46-L48"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenBatchNorm1d.forward" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.PhasenBatchNorm2d">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">PhasenBatchNorm2d</code><span class="sig-paren">(</span><em class="sig-param">num_features: int</em>, <em class="sig-param">non_linear: str = 'relu'</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L51-L62"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenBatchNorm2d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.BatchNorm2d.html#torch.nn.BatchNorm2d" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.BatchNorm2d</span></code></a></p>
+<p>BatchNorm2d for Phasen (following a non-linear layer)</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.PhasenBatchNorm2d.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">inp: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L60-L62"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenBatchNorm2d.forward" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.PhasenGlobalNorm">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">PhasenGlobalNorm</code><span class="sig-paren">(</span><em class="sig-param">dim: int</em>, <em class="sig-param">eps: float = 1e-05</em>, <em class="sig-param">elementwise_affine: bool = True</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L65-L107"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenGlobalNorm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a></p>
+<p>Global Normalization for Phasen</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.PhasenGlobalNorm.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">inp: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L85-L103"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenGlobalNorm.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>inp</strong> – N x C x F x T</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><em>out</em> – N x C x F x T</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="asteroid.models.phasen.PhasenGlobalNorm.extra_repr">
+<code class="sig-name descname">extra_repr</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L105-L107"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenGlobalNorm.extra_repr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.FTBlock">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">FTBlock</code><span class="sig-paren">(</span><em class="sig-param">channel_amp: int</em>, <em class="sig-param">num_bins: int = 257</em>, <em class="sig-param">channel_r: int = 5</em>, <em class="sig-param">conv1d_kernel: int = 9</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L110-L161"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.FTBlock" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a></p>
+<p>Frequency Transformation Block</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.FTBlock.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">inp: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; torch.Tensor<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L135-L161"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.FTBlock.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>inp</strong> – N x Ca x F x T</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><em>out</em> – N x Ca x F x T</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.TSBlock">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">TSBlock</code><span class="sig-paren">(</span><em class="sig-param">channel_amp: int</em>, <em class="sig-param">channel_pha: int</em>, <em class="sig-param">num_bins: int = 257</em>, <em class="sig-param">channel_r: int = 5</em>, <em class="sig-param">conv1d_kernel: int = 9</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L164-L216"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.TSBlock" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a></p>
+<p>Two Stream Block</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.TSBlock.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">amp_and_pha: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; Tuple[torch.Tensor, torch.Tensor]<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L199-L216"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.TSBlock.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>amp</strong> (<em>Tensor</em>) – N x Ca x F x T</p></li>
+<li><p><strong>pha</strong> (<em>Tensor</em>) – N x Cp x F x T</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The same shape as input</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.PhasenMasker">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">PhasenMasker</code><span class="sig-paren">(</span><em class="sig-param">channel_amp: int = 24</em>, <em class="sig-param">channel_pha: int = 12</em>, <em class="sig-param">num_tsbs: int = 3</em>, <em class="sig-param">num_bins: int = 257</em>, <em class="sig-param">channel_r: int = 5</em>, <em class="sig-param">conv1d_kernel: int = 9</em>, <em class="sig-param">lstm_hidden: int = 300</em>, <em class="sig-param">linear_size: int = 512</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L219-L299"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenMasker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a></p>
+<p>PHASEN: A Phase-and-Harmonics-Aware Speech Enhancement Network</p>
+<dl class="method">
+<dt id="asteroid.models.phasen.PhasenMasker.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param">inp: torch.Tensor</em><span class="sig-paren">)</span> &#x2192; Tuple[torch.Tensor, torch.Tensor]<a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L270-L299"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.PhasenMasker.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>mix</strong> (<em>Tensor</em>) – N x S</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="asteroid.models.phasen.Phasen">
+<em class="property">class </em><code class="sig-prename descclassname">asteroid.models.phasen.</code><code class="sig-name descname">Phasen</code><span class="sig-paren">(</span><em class="sig-param">n_filters=512</em>, <em class="sig-param">kernel_size=400</em>, <em class="sig-param">stride=100</em>, <em class="sig-param">sample_rate=8000</em>, <em class="sig-param">**masker_kwargs</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L302-L347"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.Phasen" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="../package_reference/models.html#asteroid.models.base_models.BaseEncoderMaskerDecoder" title="asteroid.models.base_models.BaseEncoderMaskerDecoder"><code class="xref py py-class docutils literal notranslate"><span class="pre">asteroid.models.base_models.BaseEncoderMaskerDecoder</span></code></a></p>
+<dl class="method">
+<dt id="asteroid.models.phasen.Phasen.forward_masker">
+<code class="sig-name descname">forward_masker</code><span class="sig-paren">(</span><em class="sig-param">tf_rep</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L325-L332"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.Phasen.forward_masker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimates masks from time-frequency representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>tf_rep</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><em>torch.Tensor</em></a>) – Time-frequency representation in (batch,
+feat, seq).</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><em>torch.Tensor</em> – Estimated masks</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="asteroid.models.phasen.Phasen.apply_masks">
+<code class="sig-name descname">apply_masks</code><span class="sig-paren">(</span><em class="sig-param">tf_rep</em>, <em class="sig-param">est_masks</em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L335-L338"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.Phasen.apply_masks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Applies masks to time-frequency representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tf_rep</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><em>torch.Tensor</em></a>) – Time-frequency representation in (batch,
+feat, seq) shape.</p></li>
+<li><p><strong>est_masks</strong> (<a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (1.10.0a0+git3b69ec8 ))"><em>torch.Tensor</em></a>) – Estimated masks.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><em>torch.Tensor</em> – Masked time-frequency representations.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="asteroid.models.phasen.Phasen.get_model_args">
+<code class="sig-name descname">get_model_args</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/asteroid-team/asteroid/blob/v0.4.0rc1/asteroid/asteroid/asteroid/models/phasen.py#L340-L347"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#asteroid.models.phasen.Phasen.get_model_args" title="Permalink to this definition">¶</a></dt>
+<dd><p>Arguments needed to re-instantiate the model.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Oncoming.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">asteroid.models.phasen module</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+         <script src="../_static/jquery.js"></script>
+         <script src="../_static/underscore.js"></script>
+         <script src="../_static/doctools.js"></script>
+         <script src="../_static/language_data.js"></script>
+         <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+         <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+         <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+     
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <!--
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://mpariente.github.io/asteroid/">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://mpariente.github.io/asteroid/">View Resources</a>
+        </div>
+        -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://mpariente.github.io/asteroid/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+
+        <div class="footer-logo-col">
+          <img class="footer-logo-img" src="../_static/images/dark_asteroid_logo.svg"/>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://mpariente.github.io/asteroid/">Asteroid</a></li>
+            <li><a href="https://colab.research.google.com/github/mpariente/asteroid/blob/master/notebooks/00_GettingStarted.ipynb">Get Started</a></li>
+            <li><a href="https://mpariente.github.io/asteroid/">Features</a></li>
+            <li><a href="">Ecosystem</a></li>
+            <li><a href="https://mpariente.github.io/asteroid/">Blog</a></li>
+            <li><a href="https://mpariente.github.io/asteroid/">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://mpariente.github.io/asteroid/">Support</a></li>
+            <li><a href="">Tutorials</a></li>
+            <li><a href="https://mpariente.github.io/asteroid/">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/mpariente/asteroid/issues" target="_blank">Github Issues</a></li>
+            <li><a href="" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/mpariente/asteroid/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </footer> -->
+
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://mpariente.github.io/asteroid/" aria-label="PyTorch Lightning"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://colab.research.google.com/github/mpariente/asteroid/blob/master/notebooks/00_GettingStarted.ipynb">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://mpariente.github.io/asteroid/">Features</a>
+          </li>
+
+          <li>
+            <a href="https://mpariente.github.io/asteroid/">Blog</a>
+          </li>
+
+          <li>
+            <a href="">Tutorials</a>
+          </li>
+
+          <li class="active">
+            <a href="https://mpariente.github.io/asteroid/">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://mpariente.github.io/asteroid/">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/mpariente/asteroid">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+asteroid.models.smolnet module
+==============================
+
+.. automodule:: asteroid.models.smolnet
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

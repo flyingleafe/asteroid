@@ -1,0 +1,8 @@
+asteroid.models.fcnn\_regression module
+=======================================
+
+.. automodule:: asteroid.models.fcnn_regression
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

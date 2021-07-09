@@ -1,0 +1,8 @@
+asteroid.models.wave\_unet module
+=================================
+
+.. automodule:: asteroid.models.wave_unet
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

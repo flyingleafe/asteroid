@@ -1,0 +1,34 @@
+asteroid.models package
+=======================
+
+.. automodule:: asteroid.models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+Submodules
+----------
+
+.. toctree::
+
+   asteroid.models.auto_encoder
+   asteroid.models.base_models
+   asteroid.models.conv_tasnet
+   asteroid.models.dccrnet
+   asteroid.models.dcunet
+   asteroid.models.demask
+   asteroid.models.demucs
+   asteroid.models.dprnn_tasnet
+   asteroid.models.dptnet
+   asteroid.models.fcnn_regression
+   asteroid.models.lstm_tasnet
+   asteroid.models.metric_gan
+   asteroid.models.phasen
+   asteroid.models.publisher
+   asteroid.models.segan
+   asteroid.models.smolnet
+   asteroid.models.sudormrf
+   asteroid.models.vae
+   asteroid.models.wave_unet
+   asteroid.models.zenodo

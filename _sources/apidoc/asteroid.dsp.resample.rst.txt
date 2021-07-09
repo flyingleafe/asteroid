@@ -1,0 +1,8 @@
+asteroid.dsp.resample module
+============================
+
+.. automodule:: asteroid.dsp.resample
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

@@ -1,0 +1,8 @@
+asteroid.models.vae module
+==========================
+
+.. automodule:: asteroid.models.vae
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

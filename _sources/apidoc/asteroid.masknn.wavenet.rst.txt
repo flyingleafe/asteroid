@@ -1,0 +1,8 @@
+asteroid.masknn.wavenet module
+==============================
+
+.. automodule:: asteroid.masknn.wavenet
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

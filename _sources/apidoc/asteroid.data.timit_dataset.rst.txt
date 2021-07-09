@@ -1,0 +1,8 @@
+asteroid.data.timit\_dataset module
+===================================
+
+.. automodule:: asteroid.data.timit_dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

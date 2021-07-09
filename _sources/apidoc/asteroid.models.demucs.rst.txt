@@ -1,0 +1,8 @@
+asteroid.models.demucs module
+=============================
+
+.. automodule:: asteroid.models.demucs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
